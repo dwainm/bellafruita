@@ -122,15 +122,17 @@ class Procon:
                 # Write single coil
                 if not isinstance(value, bool):
                     return False
-                client.write_coil(address, value, device_id=slave_id)
-                return True
-
+                result = client.write_coil(address, value, device_id=slave_id)
+                # Check if write was successful (result should not be None)
+                return result is not None
+            
             elif reg_type == 'registers':
                 # Write single register
                 if not isinstance(value, int):
                     return False
-                client.write_register(address, value, device_id=slave_id)
-                return True
+                result = client.write_register(address, value, device_id=slave_id)
+                # Check if write was successful (result should not be None)
+                return result is not None
 
         except Exception:
             return False
