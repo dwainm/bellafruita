@@ -528,7 +528,7 @@ class ModbusTUI(App):
                             )
                             self.input_widgets[i] = widget
                             yield widget
-                        
+
                         # Add holding register at bottom of right column
                         with Horizontal(classes="register-row"):
                             yield Label("REG0 (Ver):", classes="register-label-compact")
