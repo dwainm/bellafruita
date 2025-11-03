@@ -118,15 +118,15 @@ class CommsStatusWidget(Static):
     def compose(self) -> ComposeResult:
         """Create child widgets."""
         with Horizontal(classes="comms-status-row"):
-            # Heartbeat indicators on the left
-            yield Label("INPUT:", classes="heartbeat-label")
-            yield Label(HEARTBEAT_INACTIVE, id="input_indicator", classes="heartbeat-indicator")
-            yield Label("OUTPUT:", classes="heartbeat-label")
-            yield Label(HEARTBEAT_INACTIVE, id="output_indicator", classes="heartbeat-indicator")
             # Status in the center
             yield Static("[dim]Waiting for connection attempt...[/dim]", id="comms_status_text", classes="comms-status-text")
             # Retry button on the right
             yield Button("Retry Connection", id="retry_button", variant="warning", classes="retry-button")
+            # Heartbeat indicators on the right
+            yield Label("INPUT:", classes="heartbeat-label")
+            yield Label(HEARTBEAT_INACTIVE, id="input_indicator", classes="heartbeat-indicator")
+            yield Label("OUTPUT:", classes="heartbeat-label")
+            yield Label(HEARTBEAT_INACTIVE, id="output_indicator", classes="heartbeat-indicator")
 
     def on_mount(self) -> None:
         """Called when widget is mounted."""
