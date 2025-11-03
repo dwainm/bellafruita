@@ -74,7 +74,20 @@ class Rule:
 
 
 class RuleEngine:
-    """Executes rules in polling loop with shared state management."""
+    """Executes rules sequentially like PLC ladder logic.
+
+    LADDER LOGIC BEHAVIOR:
+    - Rules execute in order from first to last (top to bottom)
+    - Each rule evaluates its condition, then executes its action
+    - Later rules can override earlier rules (LAST WRITE WINS)
+    - State changes are immediately visible to subsequent rules
+    - Safety rules should be added LAST to ensure they always win
+
+    Example execution order:
+    1. Normal control rules (start conveyors, timers, etc.)
+    2. Interlock rules (safety dependencies)
+    3. Emergency rules (E-Stop, comms failure) - ALWAYS LAST
+    """
 
     def __init__(self, controller):
         """Initialize rule engine.
@@ -83,12 +96,22 @@ class RuleEngine:
             controller: ConveyorController instance
         """
         self.controller = controller
-        self.state: Dict[str, Any] = {}  # Shared state for all rules
+
+        # STATE PERSISTENCE (Like PLC Memory):
+        # This dictionary is created ONCE and PERSISTS across all scan cycles.
+        # Rules can set values that remain until explicitly changed or cleared.
+        # Examples: state['READY'] = True, state['TIMER_START'] = 1234567890
+        # State is NOT rebuilt each scan - only explicit clear() wipes it.
+        self.state: Dict[str, Any] = {}
+
         self.rules: list[Rule] = []
-        self.active_rules: list[str] = []  # Names of currently triggered rules
+        self.active_rules: list[str] = []  # Cleared each scan, state is NOT
 
     def add_rule(self, rule: Rule) -> None:
         """Add a rule to the engine.
+
+        IMPORTANT: Rules execute in the order they are added!
+        Add safety/emergency rules LAST so they can override normal operation.
 
         Args:
             rule: Rule instance to add
@@ -97,27 +120,39 @@ class RuleEngine:
         self.controller.log_manager.info(f"Added rule: {rule.name}")
 
     def evaluate(self, sensor_data: Dict[str, Any]) -> None:
-        """Evaluate all rules and execute triggered ones.
+        """Evaluate all rules sequentially (ladder logic style).
 
-        Called on each polling cycle with fresh sensor data.
+        Executes like a PLC scan:
+        1. Read inputs (sensor_data) - FRESH each scan
+        2. Execute all rules in order (top to bottom)
+        3. Later rules can override earlier rules
+        4. Safety rules at the end always take precedence
+
+        IMPORTANT - State Persistence:
+        - sensor_data: Fresh inputs read each scan (like PLC input registers)
+        - self.state: PERSISTS across scans (like PLC memory bits)
+        - Only active_rules is cleared each scan
+        - State values remain until explicitly changed by rules or cleared
 
         Args:
             sensor_data: Current sensor/register readings
         """
+        # Clear active rules list (NOT state - state persists!)
         self.active_rules.clear()
 
+        # Execute ALL rules in order (like PLC ladder rungs)
         for rule in self.rules:
             if not rule.enabled:
                 continue
 
             try:
-                # Check if rule should trigger
+                # Check if rule should trigger (like ladder contacts)
                 if rule.condition(sensor_data, self.state):
                     self.active_rules.append(rule.name)
                     rule.last_triggered = time.time()
                     rule.trigger_count += 1
 
-                    # Execute rule action
+                    # Execute rule action (like ladder coil)
                     rule.action(self.controller, self.state)
 
             except Exception as e:
@@ -149,7 +184,16 @@ class RuleEngine:
         self.state[key] = value
 
     def clear_state(self) -> None:
-        """Clear all state variables."""
+        """Clear all state variables.
+
+        IMPORTANT: State is NOT cleared automatically each scan!
+        State only clears when:
+        1. This method is called explicitly
+        2. Emergency stop rule calls state.clear()
+        3. Manual intervention via API
+
+        Otherwise state persists indefinitely across all scans.
+        """
         self.state.clear()
 
     def enable_rule(self, rule_name: str) -> None:

@@ -1,7 +1,22 @@
 """Rules for Bella Fruita apple sorting machine - PLC Tipper Sequence.
 
 Based on: Open PLC Tipper Info.pdf
-Define custom automation rules here.
+
+LADDER LOGIC EXECUTION MODEL:
+This rule system works like PLC ladder logic:
+
+1. Rules execute SEQUENTIALLY (top to bottom, like ladder rungs)
+2. Later rules can OVERRIDE earlier rules (last write wins)
+3. State changes are IMMEDIATELY visible to subsequent rules
+4. EMERGENCY rules are placed LAST so they always win
+
+Example:
+- Rung 1: "Start Conveyor 2 if button pressed"  → Sets CONVEYOR_2_RUN = True
+- Rung 2: "Stop Conveyor 2 if S2 active"        → Can override, sets CONVEYOR_2_RUN = False
+- Rung 3: "E-Stop pressed"                      → ALWAYS WINS, stops everything
+
+This makes the logic easy to reason about and debug, just like ladder logic.
+Order matters - add safety rules LAST to ensure they can override normal operation.
 """
 
 from src.rules import Rule
@@ -319,19 +334,35 @@ class EmergencyStopResetRule(Rule):
 def setup_rules(rule_engine):
     """Add all rules to the rule engine.
 
+    LADDER LOGIC ORDER (like PLC rungs):
+    1. Comms monitoring and reset logic
+    2. System ready checks and state management
+    3. Normal operation (conveyor control, timers)
+    4. Safety interlocks (dependencies between outputs)
+    5. EMERGENCY OVERRIDES (E-Stop, comms failure) - ALWAYS LAST
+
     Args:
         rule_engine: RuleEngine instance
     """
-    # Add rules in priority order
-    rule_engine.add_rule(EmergencyStopRule())          # Highest priority - emergency stop
-    rule_engine.add_rule(EmergencyStopResetRule())     # Allow reset after emergency stop
+    # ===== SECTION 1: Communications Monitoring =====
     rule_engine.add_rule(CommsHealthCheckRule())       # Monitor comms health continuously
     rule_engine.add_rule(CommsResetRule())             # Allow reset after comms failure
-    rule_engine.add_rule(ReadyRule())
-    rule_engine.add_rule(ClearReadyRule())
-    rule_engine.add_rule(StartConveyor2Rule())
-    rule_engine.add_rule(Timer1StartRule())
-    rule_engine.add_rule(Conveyor3StartWithTimerRule())
-    rule_engine.add_rule(StopConveyorsOnS2FalseRule())
-    rule_engine.add_rule(PALMChaintrackControlRule())
-    rule_engine.add_rule(Conveyor3DependencyRule())    # Safety rule
+
+    # ===== SECTION 2: System Ready State Management =====
+    rule_engine.add_rule(ReadyRule())                  # Set READY when conditions met
+    rule_engine.add_rule(ClearReadyRule())             # Clear READY when conditions lost
+
+    # ===== SECTION 3: Normal Operation (Conveyor Control) =====
+    rule_engine.add_rule(StartConveyor2Rule())         # Start Conveyor 2 on button press
+    rule_engine.add_rule(Timer1StartRule())            # Start 30-second timer
+    rule_engine.add_rule(Conveyor3StartWithTimerRule()) # Start Conveyor 3 after timer
+    rule_engine.add_rule(StopConveyorsOnS2FalseRule()) # Stop conveyors when S2 false
+    rule_engine.add_rule(PALMChaintrackControlRule())  # PALM chaintrack control
+
+    # ===== SECTION 4: Safety Interlocks =====
+    rule_engine.add_rule(Conveyor3DependencyRule())    # Conveyor 3 requires Conveyor 2
+
+    # ===== SECTION 5: EMERGENCY OVERRIDES (ALWAYS EXECUTE LAST) =====
+    # These rules execute last and can override all previous rules
+    rule_engine.add_rule(EmergencyStopRule())          # E-Stop stops everything
+    rule_engine.add_rule(EmergencyStopResetRule())     # Allow reset after emergency
