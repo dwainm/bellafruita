@@ -496,40 +496,40 @@ class ModbusTUI(App):
                 yield Static("Input Coils & Registers", classes="section-title")
 
                 with Horizontal(classes="inputs-columns"):
-                    # Left column (inputs 1-8)
+                    # Get all defined inputs from MODBUS_MAP (sorted by address)
+                    all_inputs = sorted(MODBUS_MAP['INPUT']['coils'].items())
+                    mid_point = (len(all_inputs) + 1) // 2  # Split into two columns
+
+                    # Left column (first half of defined inputs)
                     with Vertical(classes="input-column"):
-                        for i in range(1, 9):
-                            # Get info from MODBUS_MAP (0-indexed address)
-                            address = i - 1
-                            map_info = MODBUS_MAP['INPUT']['coils'].get(address, {})
-                            label = map_info.get('label', f'Input {i}')
+                        for address, map_info in all_inputs[:mid_point]:
+                            input_number = address + 1  # Convert to 1-indexed for display
+                            label = map_info.get('label', f'Input {input_number}')
                             description = map_info.get('description', '')
 
                             widget = InputControl(
-                                input_number=i,
+                                input_number=input_number,
                                 label=label,
                                 description=description,
                                 editable=self.editable
                             )
-                            self.input_widgets[i] = widget
+                            self.input_widgets[input_number] = widget
                             yield widget
 
-                    # Right column (inputs 9-16 + holding register)
+                    # Right column (second half of defined inputs + holding register)
                     with Vertical(classes="input-column"):
-                        for i in range(9, 17):
-                            # Get info from MODBUS_MAP (0-indexed address)
-                            address = i - 1
-                            map_info = MODBUS_MAP['INPUT']['coils'].get(address, {})
-                            label = map_info.get('label', f'Input {i}')
+                        for address, map_info in all_inputs[mid_point:]:
+                            input_number = address + 1  # Convert to 1-indexed for display
+                            label = map_info.get('label', f'Input {input_number}')
                             description = map_info.get('description', '')
 
                             widget = InputControl(
-                                input_number=i,
+                                input_number=input_number,
                                 label=label,
                                 description=description,
                                 editable=self.editable
                             )
-                            self.input_widgets[i] = widget
+                            self.input_widgets[input_number] = widget
                             yield widget
 
                         # Add holding register at bottom of right column
@@ -702,11 +702,13 @@ class ModbusTUI(App):
             sensor_data = {**input_data, **output_data}
             self.rule_engine.evaluate(sensor_data)
 
-        # Check comms health (will auto-stop motors if dead)
-        self.controller.check_and_handle_comms_failure()
-
-        # Update comms status widget
-        self.comms_status_widget.set_status(self.controller.comms_dead)
+            # Update comms status widget using rule engine state
+            comms_failed = self.rule_engine.state.get('COMMS_FAILED', False)
+            self.comms_status_widget.set_status(comms_failed)
+        else:
+            # Fallback: no rule engine, use controller's comms_dead flag
+            self.controller.check_and_handle_comms_failure()
+            self.comms_status_widget.set_status(self.controller.comms_dead)
 
         # Update input widget states
         if hasattr(self.controller.input_client, 'inputs'):

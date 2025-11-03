@@ -17,8 +17,8 @@ MODBUS_MAP = {
             7: {'label': 'E_Stop', 'description': 'Emergency Stop Button'},
             8: {'label': 'Manual_Select', 'description': 'Selector Switch Manual'},
             9: {'label': 'Auto_Select', 'description': 'Selector Switch Auto'},
-            # 10: {'label': 'Manual_Forward', 'description': 'Manual Button Forward'},
-            # 11: {'label': 'Manual_Reverse', 'description': 'Manual Button Reverse'},
+            10: {'label': 'Klaar_Geweeg_Btn', 'description': 'Klaar Geweeg Button (Ready Weighed)'},
+            11: {'label': 'Reset_Btn', 'description': 'System Reset Button'},
             12: {'label': 'M1_TC', 'description': 'Conveyor 1 Motor Thermal Contact'},
             13: {'label': 'M2_TC', 'description': 'Conveyor 2 Motor Thermal Contact'},
             14: {'label': 'PALM_Run_Signal', 'description': 'PALM Chemtrack Run Signal'},
@@ -30,9 +30,9 @@ MODBUS_MAP = {
     },
     'OUTPUT': {
         'coils': {
-            # 0: {'label': 'MOTOR_1', 'description': 'Main Conveyor Motor'},
-            1: {'label': 'MOTOR_2', 'description': 'Feeder Belt Motor'},
-            2: {'label': 'MOTOR_3', 'description': 'Sorter Motor'},
+            0: {'label': 'MOTOR_1', 'description': 'Conveyor 1 Motor'},
+            1: {'label': 'MOTOR_2', 'description': 'Conveyor 2 Motor'},
+            2: {'label': 'MOTOR_3', 'description': 'Conveyor 3 Motor'},
             # 3: {'label': 'MOTOR_4', 'description': 'Auxiliary Motor'},
         },
         'registers': {

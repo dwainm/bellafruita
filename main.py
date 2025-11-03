@@ -173,7 +173,7 @@ class ConveyorController:
         """Emergency stop - write False to all output coils."""
         try:
             # Stop all motors using Procon API
-            for motor in ['motor_1', 'motor_2', 'motor_3', 'motor_4']:
+            for motor in ['MOTOR_1', 'MOTOR_2', 'MOTOR_3']:
                 self.procon.set('output', motor, False)
             self.log_manager.info("All motors stopped")
         except Exception as e:
