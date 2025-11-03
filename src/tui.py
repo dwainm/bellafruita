@@ -1,0 +1,783 @@
+"""Textual TUI for monitoring and controlling Modbus system."""
+
+from textual.app import App, ComposeResult
+from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
+from textual.widgets import Header, Footer, Static, Switch, Input, Label, Button
+from textual.reactive import reactive
+from textual import on
+
+
+class InputControl(Static):
+    """Widget for a single input control."""
+
+    state = reactive(False)
+
+    def __init__(
+        self,
+        input_number: int,
+        label: str,
+        description: str,
+        editable: bool = False,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.input_number = input_number
+        self.input_label = label
+        self.description = description
+        self.editable = editable
+        self.switch = None
+        self.state_indicator = None
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        with Horizontal(classes="input-row"):
+            if self.editable:
+                self.switch = Switch(value=self.state, id=f"switch_{self.input_number}")
+                yield self.switch
+            else:
+                self.state_indicator = Label("●" if self.state else "○", classes="state-indicator")
+                yield self.state_indicator
+
+            yield Label(f"{self.input_label:12}", classes="input-label")
+            yield Label(self.description, classes="input-description")
+
+    def watch_state(self, new_state: bool) -> None:
+        """Called when state changes."""
+        if self.switch and self.editable:
+            self.switch.value = new_state
+        # Update the indicator if in read-only mode
+        if not self.editable and self.state_indicator:
+            self.state_indicator.update("●" if new_state else "○")
+
+
+class ActiveRulesWidget(Static):
+    """Widget showing active rules and system state."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.rules_text = "[dim]No rules active[/dim]"
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        yield Static(self.rules_text, id="rules_content", markup=True)
+
+    def update_rules(self, active_rules: list, state: dict) -> None:
+        """Update display with active rules and state.
+
+        Args:
+            active_rules: List of rule names currently triggered
+            state: Current state dictionary
+        """
+        lines = []
+
+        # Show active rules
+        if active_rules:
+            lines.append("[bold cyan]Active Rules:[/bold cyan]")
+            for rule_name in active_rules:
+                lines.append(f"  ▶ {rule_name}")
+        else:
+            lines.append("[dim]No rules active[/dim]")
+
+        # Show state variables
+        if state:
+            lines.append("")
+            lines.append("[bold yellow]State Variables:[/bold yellow]")
+            for key, value in sorted(state.items()):
+                # Color code boolean values
+                if isinstance(value, bool):
+                    color = "green" if value else "red"
+                    lines.append(f"  {key}: [bold {color}]{value}[/bold {color}]")
+                else:
+                    lines.append(f"  {key}: {value}")
+
+        self.rules_text = "\n".join(lines)
+        rules_content = self.query_one("#rules_content", Static)
+        rules_content.update(self.rules_text)
+
+
+class CommsStatusWidget(Static):
+    """Widget showing communication status and retry button."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._initialized = False
+        self._status_text = None
+        self._retry_button = None
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        with Horizontal(classes="comms-status-row"):
+            yield Static("[dim]Waiting for connection attempt...[/dim]", id="comms_status_text", classes="comms-status-text")
+            yield Button("Retry Connection", id="retry_button", variant="warning", classes="retry-button")
+
+    def on_mount(self) -> None:
+        """Called when widget is mounted."""
+        self._status_text = self.query_one("#comms_status_text", Static)
+        self._retry_button = self.query_one("#retry_button", Button)
+        self._retry_button.display = False  # Hide retry button initially
+
+    def set_status(self, dead: bool) -> None:
+        """Update comms status."""
+        if not self._status_text or not self._retry_button:
+            return
+
+        self._initialized = True
+        if dead:
+            # Comms dead - show warning
+            self._status_text.update("[bold red on yellow] ⚠️  COMMUNICATIONS FAILED - MOTORS STOPPED [/bold red on yellow]")
+            self._retry_button.display = True
+        else:
+            # Comms OK - show connected
+            self._status_text.update("[bold black on green] ✓ CONNECTED [/bold black on green]")
+            self._retry_button.display = False
+
+
+class HeartbeatWidget(Static):
+    """Widget showing heartbeat indicators for INPUT and OUTPUT modules."""
+
+    input_beat = reactive(False)
+    output_beat = reactive(False)
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        with Horizontal(classes="heartbeat-row"):
+            yield Label("INPUT: ", classes="heartbeat-label")
+            yield Label("○", id="input_indicator", classes="heartbeat-indicator")
+            yield Label("  OUTPUT: ", classes="heartbeat-label")
+            yield Label("○", id="output_indicator", classes="heartbeat-indicator")
+
+    def watch_input_beat(self, value: bool) -> None:
+        """Update input heartbeat indicator."""
+        indicator = self.query_one("#input_indicator", Label)
+        indicator.update("●" if value else "○")
+
+    def watch_output_beat(self, value: bool) -> None:
+        """Update output heartbeat indicator."""
+        indicator = self.query_one("#output_indicator", Label)
+        indicator.update("●" if value else "○")
+
+    def pulse_input(self) -> None:
+        """Pulse input indicator."""
+        self.input_beat = True
+
+    def pulse_output(self) -> None:
+        """Pulse output indicator."""
+        self.output_beat = True
+
+    def reset_pulses(self) -> None:
+        """Reset both pulses."""
+        self.input_beat = False
+        self.output_beat = False
+
+
+class EventLogWidget(Static):
+    """Widget showing system events with severity levels."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.event_text = ""
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        yield Static(self.event_text, id="event_content", markup=True)
+
+    def update_events(self, events: list, count: int = 10) -> None:
+        """Update event display with recent entries.
+
+        Args:
+            events: List of recent EventEntry objects
+            count: Number of entries to display
+        """
+        lines = []
+
+        # Show recent events (newest last)
+        for event in events[-count:]:
+            timestamp = event.get_formatted_time()
+
+            # Color code by severity level
+            if event.level == "CRITICAL":
+                level_style = "[bold white on red]"
+                end_style = "[/bold white on red]"
+            elif event.level == "ERROR":
+                level_style = "[bold red]"
+                end_style = "[/bold red]"
+            elif event.level == "WARNING":
+                level_style = "[bold yellow]"
+                end_style = "[/bold yellow]"
+            else:  # INFO
+                level_style = "[bold cyan]"
+                end_style = "[/bold cyan]"
+
+            lines.append(f"[dim]{timestamp}[/dim] {level_style}{event.level:8}{end_style} {event.message}")
+
+        self.event_text = "\n".join(lines) if lines else "[dim]No events yet[/dim]"
+        event_content = self.query_one("#event_content", Static)
+        event_content.update(self.event_text)
+
+
+class LogDisplayWidget(Static):
+    """Widget showing recent log entries with colors."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.log_text = ""
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        yield Static(self.log_text, id="log_content", markup=True)
+
+    def update_logs(self, input_logs: list, output_logs: list, count: int = 5) -> None:
+        """Update log display with recent entries.
+
+        Args:
+            input_logs: List of recent input LogEntry objects
+            output_logs: List of recent output LogEntry objects
+            count: Number of entries to display
+        """
+        lines = []
+
+        # Show recent logs (newest first)
+        all_logs = []
+        for log in input_logs[-count:]:
+            all_logs.append(('INPUT', log))
+        for log in output_logs[-count:]:
+            all_logs.append(('OUTPUT', log))
+
+        # Sort by timestamp (newest last)
+        all_logs.sort(key=lambda x: x[1].timestamp)
+
+        for device_type, log in all_logs:
+            timestamp = log.get_formatted_time()
+            lines.append(f"[bold][{timestamp}] {device_type}:[/bold]")
+
+            if device_type == 'INPUT':
+                # Format input data - 8 per line for readability with colored blocks
+                input_items = list(log.data.items())
+                for i in range(0, len(input_items), 8):
+                    row = input_items[i:i+8]
+                    formatted = []
+                    for key, value in row:
+                        if value:
+                            formatted.append(f"[black on green] {key:12} [/black on green]")
+                        else:
+                            formatted.append(f"[white on red] {key:12} [/white on red]")
+                    lines.append("  " + " ".join(formatted))
+
+            else:  # OUTPUT
+                # Format output data with colored blocks
+                output_items = []
+                for key, value in log.data.items():
+                    if key == 'REG0':
+                        # Register value
+                        if value == 0:
+                            output_items.append(f"[white on red] {key}={value} [/white on red]")
+                        else:
+                            output_items.append(f"[black on green] {key}={value} [/black on green]")
+                    else:
+                        # Boolean coil
+                        if value:
+                            output_items.append(f"[black on green] {key} [/black on green]")
+                        else:
+                            output_items.append(f"[white on red] {key} [/white on red]")
+                lines.append("  " + " ".join(output_items))
+
+            lines.append("")  # Blank line between entries
+
+        self.log_text = "\n".join(lines)
+        log_content = self.query_one("#log_content", Static)
+        log_content.update(self.log_text)
+
+
+        # Import App from Textualise
+class ModbusTUI(App): 
+    """Textual TUI for Modbus monitoring and control."""
+
+    CSS = """
+    Screen {
+        background: $surface;
+    }
+
+    #main-container {
+        height: 100%;
+        padding: 1;
+    }
+
+    .connection-status {
+        text-align: center;
+        text-style: bold;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    #inputs-container {
+        height: auto;
+        border: solid $primary;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    .inputs-columns {
+        height: auto;
+    }
+
+    .input-column {
+        width: 50%;
+        height: auto;
+    }
+
+    #register-container {
+        height: auto;
+        border: solid $primary;
+        padding: 1;
+    }
+
+    .section-title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    .input-row {
+        height: auto;
+        margin-bottom: 0;
+    }
+
+    .state-indicator {
+        width: 3;
+        color: $success;
+        text-align: center;
+    }
+
+    .input-label {
+        width: 15;
+        color: $text;
+    }
+
+    .input-description {
+        width: auto;
+        color: $text-muted;
+    }
+
+    .register-row {
+        height: auto;
+        margin-top: 1;
+    }
+
+    .register-label {
+        width: 25;
+        color: $text;
+    }
+
+    Input {
+        width: 20;
+    }
+
+    #comms-status-container {
+        height: auto;
+        border: solid $error;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    .comms-status-row {
+        height: auto;
+        align: center middle;
+    }
+
+    .comms-status-text {
+        width: auto;
+        text-align: center;
+    }
+
+    .retry-button {
+        margin-left: 2;
+    }
+
+    #heartbeat-container {
+        height: auto;
+        border: solid $primary;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    .heartbeat-row {
+        height: auto;
+    }
+
+    .heartbeat-label {
+        color: $text;
+    }
+
+    .heartbeat-indicator {
+        color: $warning;
+        text-align: center;
+    }
+
+    #active-rules-container {
+        height: auto;
+        max-height: 15;
+        border: solid $accent;
+        padding: 1;
+        margin-bottom: 1;
+        overflow-y: auto;
+    }
+
+    #event-log-container {
+        height: auto;
+        max-height: 12;
+        border: solid $warning;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    #log-container {
+        height: auto;
+        max-height: 20;
+        border: solid $primary;
+        padding: 1;
+        overflow-y: auto;
+    }
+
+    #log_content {
+        height: auto;
+    }
+    """
+
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+    ]
+
+    holding_register_0 = reactive(0)
+
+    def __init__(
+        self,
+        controller,
+        rule_engine=None,
+        editable: bool = False,
+        **kwargs
+    ):
+        """Initialize TUI.
+
+        Args:
+            controller: ConveyorController instance
+            rule_engine: RuleEngine instance (optional)
+            editable: If True, show editable controls (mock mode)
+        """
+        super().__init__(**kwargs)
+        self.controller = controller
+        self.rule_engine = rule_engine
+        self.editable = editable
+        self.input_widgets = {}
+        self.register_input = None
+        self.comms_status_widget = None
+        self.connection_status_widget = None
+        self.heartbeat_widget = None
+        self.event_widget = None
+        self.active_rules_widget = None
+        self.log_widget = None
+        self.connected = False
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        # yield Header()
+
+        with ScrollableContainer(id="main-container"):
+            # Connection status header
+            self.connection_status_widget = Static("", id="connection_status", classes="connection-status")
+            yield self.connection_status_widget
+
+            # Mode indicator
+            mode = "MOCK MODE (Editable)" if self.editable else "LIVE MODE (Read-Only)"
+            yield Static(f"[bold]{mode}[/bold]", classes="section-title")
+
+            # Comms status section
+            with Container(id="comms-status-container"):
+                self.comms_status_widget = CommsStatusWidget()
+                yield self.comms_status_widget
+
+            # Inputs section - Two columns
+            with Container(id="inputs-container"):
+                yield Static("Input Coils", classes="section-title")
+
+                # Import MODBUS_MAP to get input labels and descriptions
+                from src.modbus.mapping import MODBUS_MAP
+
+                with Horizontal(classes="inputs-columns"):
+                    # Left column (inputs 1-8)
+                    with Vertical(classes="input-column"):
+                        for i in range(1, 9):
+                            # Get info from MODBUS_MAP (0-indexed address)
+                            address = i - 1
+                            map_info = MODBUS_MAP['INPUT']['coils'].get(address, {})
+                            label = map_info.get('label', f'Input {i}')
+                            description = map_info.get('description', '')
+
+                            widget = InputControl(
+                                input_number=i,
+                                label=label,
+                                description=description,
+                                editable=self.editable
+                            )
+                            self.input_widgets[i] = widget
+                            yield widget
+
+                    # Right column (inputs 9-16)
+                    with Vertical(classes="input-column"):
+                        for i in range(9, 17):
+                            # Get info from MODBUS_MAP (0-indexed address)
+                            address = i - 1
+                            map_info = MODBUS_MAP['INPUT']['coils'].get(address, {})
+                            label = map_info.get('label', f'Input {i}')
+                            description = map_info.get('description', '')
+
+                            widget = InputControl(
+                                input_number=i,
+                                label=label,
+                                description=description,
+                                editable=self.editable
+                            )
+                            self.input_widgets[i] = widget
+                            yield widget
+
+            # Register section
+            with Container(id="register-container"):
+                yield Static("Holding Registers", classes="section-title")
+
+                with Horizontal(classes="register-row"):
+                    yield Label("Register 0 (Version):", classes="register-label")
+
+                    if self.editable:
+                        self.register_input = Input(
+                            value=str(self.holding_register_0),
+                            placeholder="Enter value",
+                            type="integer",
+                            id="register_0_input"
+                        )
+                        yield self.register_input
+                    else:
+                        yield Label(
+                            str(self.holding_register_0),
+                            id="register_0_display",
+                            classes="register-label"
+                        )
+
+            # Heartbeat section
+            with Container(id="heartbeat-container"):
+                yield Static("Heartbeat", classes="section-title")
+                self.heartbeat_widget = HeartbeatWidget()
+                yield self.heartbeat_widget
+
+            # Active rules section (if rule engine provided)
+            if self.rule_engine:
+                with Container(id="active-rules-container"):
+                    yield Static("Active Rules", classes="section-title")
+                    self.active_rules_widget = ActiveRulesWidget()
+                    yield self.active_rules_widget
+
+            # Register history section
+            with ScrollableContainer(id="log-container"):
+                yield Static("Register History", classes="section-title")
+                self.log_widget = LogDisplayWidget()
+                yield self.log_widget
+
+            # System log section (at bottom)
+            with ScrollableContainer(id="event-log-container"):
+                yield Static("System Log", classes="section-title")
+                self.event_widget = EventLogWidget()
+                yield self.event_widget
+
+        yield Footer()
+
+    async def on_mount(self) -> None:
+        """Called when app is mounted."""
+        # Import constants from main module
+        from main import TUI_POLL_RATE, TUI_LOG_REFRESH_RATE, TUI_HEARTBEAT_RESET_RATE
+
+        # Always set up log display update so users can see event messages
+        self.set_interval(TUI_LOG_REFRESH_RATE, self.update_log_display)
+
+        # Attempt connection after TUI is fully loaded (0.5 second delay)
+        self.set_timer(0.5, self.attempt_connection)
+
+    def attempt_connection(self) -> None:
+        """Attempt to connect to Modbus terminals."""
+        from main import TUI_POLL_RATE, TUI_HEARTBEAT_RESET_RATE
+
+        # Show connecting message
+        self.connection_status_widget.update("[bold cyan]Connecting to Modbus terminals...[/bold cyan]")
+        self.controller.log_manager.info("Connecting to Modbus terminals...")
+
+        self.connected = self.controller.connect()
+
+        if self.connected:
+            self.connection_status_widget.update("[bold green]✓ Connected to Modbus terminals[/bold green]")
+            # Update comms status to connected
+            if self.comms_status_widget:
+                self.comms_status_widget.set_status(False)
+            # Hide connection status after 2 seconds
+            self.set_timer(2.0, lambda: self.connection_status_widget.update(""))
+
+            # Start polling only if connected
+            self.set_interval(TUI_POLL_RATE, self.poll_and_update)
+            self.set_interval(TUI_HEARTBEAT_RESET_RATE, self.reset_heartbeat)
+        else:
+            self.connection_status_widget.update("[bold red]✗ Failed to connect - Check event log[/bold red]")
+            # Set comms dead status
+            if self.comms_status_widget:
+                self.comms_status_widget.set_status(True)
+
+    @on(Switch.Changed)
+    def on_switch_changed_event(self, event: Switch.Changed) -> None:
+        """Handle switch toggle events."""
+        if self.editable and hasattr(self.controller.input_client, 'set_input_state'):
+            # Extract input number from switch ID
+            switch_id = event.switch.id
+            if switch_id and switch_id.startswith("switch_"):
+                input_num = int(switch_id.split("_")[1])
+                self.controller.input_client.set_input_state(input_num, event.value)
+
+                # Immediately evaluate rules for instant reactivity
+                if self.rule_engine:
+                    # Read current state from all inputs/outputs
+                    input_data = self.controller.read_and_log_all_inputs()
+                    output_data = self.controller.read_and_log_all_outputs()
+                    sensor_data = {**input_data, **output_data}
+
+                    # Evaluate rules immediately
+                    self.rule_engine.evaluate(sensor_data)
+
+                    # Update active rules display immediately
+                    if self.active_rules_widget:
+                        active_rules = self.rule_engine.get_active_rules()
+                        state = self.rule_engine.get_state()
+                        self.active_rules_widget.update_rules(active_rules, state)
+
+    @on(Input.Submitted, "#register_0_input")
+    def on_register_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle register input submission."""
+        if self.editable:
+            try:
+                value = int(event.value)
+                self.controller.output_client.write_register(0, value, device_id=1)
+                self.holding_register_0 = value
+
+                # Immediately evaluate rules for instant reactivity
+                if self.rule_engine:
+                    # Read current state from all inputs/outputs
+                    input_data = self.controller.read_and_log_all_inputs()
+                    output_data = self.controller.read_and_log_all_outputs()
+                    sensor_data = {**input_data, **output_data}
+
+                    # Evaluate rules immediately
+                    self.rule_engine.evaluate(sensor_data)
+
+                    # Update active rules display immediately
+                    if self.active_rules_widget:
+                        active_rules = self.rule_engine.get_active_rules()
+                        state = self.rule_engine.get_state()
+                        self.active_rules_widget.update_rules(active_rules, state)
+            except ValueError:
+                pass
+
+    @on(Button.Pressed, "#retry_button")
+    def on_retry_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle retry connection button press."""
+        # Show reconnecting message
+        self.connection_status_widget.update("[bold cyan]Reconnecting to Modbus terminals...[/bold cyan]")
+
+        # Attempt to reconnect
+        if self.controller.retry_connection():
+            # Update status immediately
+            self.connection_status_widget.update("[bold green]✓ Reconnected successfully[/bold green]")
+            self.comms_status_widget.set_status(False)
+            self.connected = True
+
+            # Start polling if not already running
+            from main import TUI_POLL_RATE, TUI_HEARTBEAT_RESET_RATE
+            self.set_interval(TUI_POLL_RATE, self.poll_and_update)
+            self.set_interval(TUI_HEARTBEAT_RESET_RATE, self.reset_heartbeat)
+
+            # Hide connection status after 2 seconds
+            self.set_timer(2.0, lambda: self.connection_status_widget.update(""))
+        else:
+            self.connection_status_widget.update("[bold red]✗ Reconnection failed - Check event log[/bold red]")
+
+    def poll_and_update(self) -> None:
+        """Poll Modbus devices, log data, and update display."""
+        # Read and log all inputs
+        input_data = self.controller.read_and_log_all_inputs()
+        self.heartbeat_widget.pulse_input()
+
+        # Read and log all outputs
+        output_data = self.controller.read_and_log_all_outputs()
+        self.heartbeat_widget.pulse_output()
+
+        # Evaluate rules if rule engine is present
+        if self.rule_engine:
+            # Combine input and output data for rule evaluation
+            sensor_data = {**input_data, **output_data}
+            self.rule_engine.evaluate(sensor_data)
+
+        # Check comms health (will auto-stop motors if dead)
+        self.controller.check_and_handle_comms_failure()
+
+        # Update comms status widget
+        self.comms_status_widget.set_status(self.controller.comms_dead)
+
+        # Update input widget states
+        if hasattr(self.controller.input_client, 'inputs'):
+            # Mock mode - read from inputs dict
+            for i in range(1, 17):
+                state = self.controller.input_client.inputs[i]['state']
+                self.input_widgets[i].state = state
+        else:
+            # Real hardware - use the data we just read
+            labels = ['S1', 'S2', 'CS1', 'CS2', 'CS3', 'M1_Trip', 'M2_Trip', 'E_Stop',
+                     'Manual_Select', 'Auto_Select', 'Manual_Forward', 'Manual_Reverse',
+                     'M1_TC', 'M2_TC', 'PALM_Run', 'DHLM_Trip']
+            for i in range(1, 17):
+                label = labels[i - 1]
+                self.input_widgets[i].state = input_data.get(label, False)
+
+        # Update register display
+        self.holding_register_0 = output_data.get('REG0', 0)
+        if not self.editable:
+            label = self.query_one("#register_0_display", Label)
+            label.update(str(self.holding_register_0))
+
+    def update_log_display(self) -> None:
+        """Update log display with recent entries (called every 3 seconds)."""
+        input_logs = self.controller.log_manager.get_recent_input_logs(count=5)
+        output_logs = self.controller.log_manager.get_recent_output_logs(count=5)
+        self.log_widget.update_logs(input_logs, output_logs, count=5)
+
+        # Update event log
+        events = self.controller.log_manager.get_recent_events(count=10)
+        self.event_widget.update_events(events, count=10)
+
+        # Update active rules display
+        if self.rule_engine and self.active_rules_widget:
+            active_rules = self.rule_engine.get_active_rules()
+            state = self.rule_engine.get_state()
+            self.active_rules_widget.update_rules(active_rules, state)
+
+    def reset_heartbeat(self) -> None:
+        """Reset heartbeat indicators."""
+        self.heartbeat_widget.reset_pulses()
+
+    def watch_holding_register_0(self, new_value: int) -> None:
+        """Called when holding register changes."""
+        if self.register_input and self.editable:
+            self.register_input.value = str(new_value)
+
+
+def run_tui(controller, rule_engine=None, editable: bool = False):
+    """Run the Textual TUI.
+
+    Args:
+        controller: ConveyorController instance
+        rule_engine: RuleEngine instance (optional)
+        editable: If True, show editable controls (mock mode)
+    """
+    app = ModbusTUI(controller=controller, rule_engine=rule_engine, editable=editable)
+    app.run()

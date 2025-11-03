@@ -1,0 +1,10 @@
+# Bella Fruita - Apple Sorting Machine Requirements
+
+# Required for TUI interface
+textual>=0.47.0
+
+# Required for real hardware (optional for mock mode)
+pymodbus>=3.5.0
+
+# Optional: Async HTTP for future API integration
+aiohttp>=3.9.0
