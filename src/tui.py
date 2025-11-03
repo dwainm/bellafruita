@@ -6,6 +6,8 @@ from textual.widgets import Header, Footer, Static, Switch, Input, Label, Button
 from textual.reactive import reactive
 from textual import on
 
+from src.modbus.mapping import MODBUS_MAP
+
 # Constants for heartbeat indicators
 HEARTBEAT_ACTIVE = "●"
 HEARTBEAT_INACTIVE = "○"
@@ -492,9 +494,6 @@ class ModbusTUI(App):
             # Inputs section - Two columns (now includes holding registers)
             with Container(id="inputs-container"):
                 yield Static("Input Coils & Registers", classes="section-title")
-
-                # Import MODBUS_MAP to get input labels and descriptions
-                from src.modbus.mapping import MODBUS_MAP
 
                 with Horizontal(classes="inputs-columns"):
                     # Left column (inputs 1-8)
