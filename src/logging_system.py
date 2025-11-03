@@ -97,7 +97,7 @@ class LogManager:
     def check_comms_health(self, timeout_seconds: float = 5.0) -> bool:
         """Check if communications are healthy based on recent logs.
 
-        Checks if version register (REG0) has been 0 or missing for too long.
+        Checks if version register (VERSION) has been 0 or missing for too long.
 
         Args:
             timeout_seconds: How long to wait before declaring comms dead
@@ -106,7 +106,7 @@ class LogManager:
             bool: True if comms healthy, False if dead
         """
         if not self.output_logs:
-            return False  # No logs yet
+            return True  # No logs yet - assume healthy on startup
 
         current_time = time.time()
         cutoff_time = current_time - timeout_seconds
@@ -116,8 +116,9 @@ class LogManager:
             if entry.timestamp < cutoff_time:
                 break  # Too old, stop checking
 
-            reg0_value = entry.data.get('REG0', 0)
-            if reg0_value != 0:
+            # Check for VERSION register (using label from MODBUS_MAP)
+            version_value = entry.data.get('VERSION', 0)
+            if version_value != 0:
                 return True  # Found valid version number
 
         # No valid version number in last timeout_seconds
