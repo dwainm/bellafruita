@@ -42,7 +42,7 @@ class ModbusClient(ModbusInterface):
         """
         try:
             return self._client.connect()
-        except (ConnectionException, OSError, TimeoutError) as e:
+        except (ConnectionException, OSError, TimeoutError):
             # Network error during connection attempt
             return False
 
