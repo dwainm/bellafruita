@@ -6,6 +6,10 @@ from textual.widgets import Header, Footer, Static, Switch, Input, Label, Button
 from textual.reactive import reactive
 from textual import on
 
+# Constants for heartbeat indicators
+HEARTBEAT_ACTIVE = "●"
+HEARTBEAT_INACTIVE = "○"
+
 
 class InputControl(Static):
     """Widget for a single input control."""
@@ -35,7 +39,7 @@ class InputControl(Static):
                 self.switch = Switch(value=self.state, id=f"switch_{self.input_number}")
                 yield self.switch
             else:
-                self.state_indicator = Label("●" if self.state else "○", classes="state-indicator")
+                self.state_indicator = Label(HEARTBEAT_ACTIVE if self.state else HEARTBEAT_INACTIVE, classes="state-indicator")
                 yield self.state_indicator
 
             yield Label(f"{self.input_label:12}", classes="input-label")
@@ -47,7 +51,7 @@ class InputControl(Static):
             self.switch.value = new_state
         # Update the indicator if in read-only mode
         if not self.editable and self.state_indicator:
-            self.state_indicator.update("●" if new_state else "○")
+            self.state_indicator.update(HEARTBEAT_ACTIVE if new_state else HEARTBEAT_INACTIVE)
 
 
 class ActiveRulesWidget(Static):
@@ -114,9 +118,9 @@ class CommsStatusWidget(Static):
         with Horizontal(classes="comms-status-row"):
             # Heartbeat indicators on the left
             yield Label("INPUT:", classes="heartbeat-label")
-            yield Label("○", id="input_indicator", classes="heartbeat-indicator")
+            yield Label(HEARTBEAT_INACTIVE, id="input_indicator", classes="heartbeat-indicator")
             yield Label("OUTPUT:", classes="heartbeat-label")
-            yield Label("○", id="output_indicator", classes="heartbeat-indicator")
+            yield Label(HEARTBEAT_INACTIVE, id="output_indicator", classes="heartbeat-indicator")
             # Status in the center
             yield Static("[dim]Waiting for connection attempt...[/dim]", id="comms_status_text", classes="comms-status-text")
             # Retry button on the right
@@ -133,12 +137,12 @@ class CommsStatusWidget(Static):
     def watch_input_beat(self, value: bool) -> None:
         """Update input heartbeat indicator."""
         if self._input_indicator:
-            self._input_indicator.update("●" if value else "○")
+            self._input_indicator.update(HEARTBEAT_ACTIVE if value else HEARTBEAT_INACTIVE)
 
     def watch_output_beat(self, value: bool) -> None:
         """Update output heartbeat indicator."""
         if self._output_indicator:
-            self._output_indicator.update("●" if value else "○")
+            self._output_indicator.update(HEARTBEAT_ACTIVE if value else HEARTBEAT_INACTIVE)
 
     def pulse_input(self) -> None:
         """Pulse input indicator."""
