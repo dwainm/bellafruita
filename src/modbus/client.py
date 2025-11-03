@@ -2,6 +2,7 @@
 
 from typing import Any
 from pymodbus.client import ModbusTcpClient
+from pymodbus.exceptions import ModbusException, ConnectionException
 
 from .interface import ModbusInterface
 
@@ -41,7 +42,7 @@ class ModbusClient(ModbusInterface):
         """
         try:
             return self._client.connect()
-        except Exception:
+        except (ConnectionException, OSError, TimeoutError) as e:
             # Network error during connection attempt
             return False
 
@@ -49,7 +50,7 @@ class ModbusClient(ModbusInterface):
         """Close connection to Modbus device."""
         try:
             self._client.close()
-        except Exception:
+        except (ConnectionException, OSError, AttributeError):
             # Ignore errors during close - connection may already be broken
             pass
 
@@ -74,7 +75,7 @@ class ModbusClient(ModbusInterface):
         """
         try:
             return self._client.read_coils(address, count=count, device_id=device_id)
-        except Exception:
+        except (ModbusException, ConnectionException, OSError, TimeoutError):
             # Network disconnection, timeout, or other communication error
             return None
 
@@ -91,7 +92,7 @@ class ModbusClient(ModbusInterface):
         """
         try:
             return self._client.write_coil(address, value, device_id=device_id)
-        except Exception:
+        except (ModbusException, ConnectionException, OSError, TimeoutError):
             # Network disconnection, timeout, or other communication error
             return None
 
@@ -108,7 +109,7 @@ class ModbusClient(ModbusInterface):
         """
         try:
             return self._client.read_holding_registers(address, count=count, device_id=device_id)
-        except Exception:
+        except (ModbusException, ConnectionException, OSError, TimeoutError):
             # Network disconnection, timeout, or other communication error
             return None
 
@@ -125,7 +126,7 @@ class ModbusClient(ModbusInterface):
         """
         try:
             return self._client.read_input_registers(address, count=count, device_id=device_id)
-        except Exception:
+        except (ModbusException, ConnectionException, OSError, TimeoutError):
             # Network disconnection, timeout, or other communication error
             return None
 
@@ -142,6 +143,6 @@ class ModbusClient(ModbusInterface):
         """
         try:
             return self._client.write_register(address, value, device_id=device_id)
-        except Exception:
+        except (ModbusException, ConnectionException, OSError, TimeoutError):
             # Network disconnection, timeout, or other communication error
             return None
