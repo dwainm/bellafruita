@@ -470,7 +470,6 @@ class ModbusTUI(App):
         self.input_widgets = {}
         self.register_input = None
         self.comms_status_widget = None
-        self.connection_status_widget = None
         self.heartbeat_widget = None
         self.event_widget = None
         self.active_rules_widget = None
@@ -483,12 +482,9 @@ class ModbusTUI(App):
 
         with ScrollableContainer(id="main-container"):
             # Connection status header
-            self.connection_status_widget = Static("", id="connection_status", classes="connection-status")
-            yield self.connection_status_widget
-
             # Mode indicator
-            mode = "MOCK MODE (Editable)" if self.editable else "LIVE MODE (Read-Only)"
-            yield Static(f"[bold]{mode}[/bold]", classes="section-title")
+            # mode = "MOCK MODE (Editable)" if self.editable else "LIVE MODE (Read-Only)"
+            # yield Static(f"[bold]{mode}[/bold]", classes="section-title")
 
             # Comms status section
             with Container(id="comms-status-container"):
@@ -604,24 +600,24 @@ class ModbusTUI(App):
         from main import TUI_POLL_RATE, TUI_HEARTBEAT_RESET_RATE
 
         # Show connecting message
-        self.connection_status_widget.update("[bold cyan]Connecting to Modbus terminals...[/bold cyan]")
+        self.comms_status_widget.update("[bold cyan]Connecting to Modbus terminals...[/bold cyan]")
         self.controller.log_manager.info("Connecting to Modbus terminals...")
 
         self.connected = self.controller.connect()
 
         if self.connected:
-            self.connection_status_widget.update("[bold green]✓ Connected to Modbus terminals[/bold green]")
+            self.comms_status_widget.update("[bold green]✓ Connected to Modbus terminals[/bold green]")
             # Update comms status to connected
             if self.comms_status_widget:
                 self.comms_status_widget.set_status(False)
             # Hide connection status after 2 seconds
-            self.set_timer(2.0, lambda: self.connection_status_widget.update(""))
+            self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
 
             # Start polling only if connected
             self.set_interval(TUI_POLL_RATE, self.poll_and_update)
             self.set_interval(TUI_HEARTBEAT_RESET_RATE, self.reset_heartbeat)
         else:
-            self.connection_status_widget.update("[bold red]✗ Failed to connect - Check event log[/bold red]")
+            self.comms_status_widget.update("[bold red]✗ Failed to connect - Check event log[/bold red]")
             # Set comms dead status
             if self.comms_status_widget:
                 self.comms_status_widget.set_status(True)
@@ -683,12 +679,12 @@ class ModbusTUI(App):
     def on_retry_button_pressed(self, event: Button.Pressed) -> None:
         """Handle retry connection button press."""
         # Show reconnecting message
-        self.connection_status_widget.update("[bold cyan]Reconnecting to Modbus terminals...[/bold cyan]")
+        self.comms_status_widget.update("[bold cyan]Reconnecting to Modbus terminals...[/bold cyan]")
 
         # Attempt to reconnect
         if self.controller.retry_connection():
             # Update status immediately
-            self.connection_status_widget.update("[bold green]✓ Reconnected successfully[/bold green]")
+            self.comms_status_widget.update("[bold green]✓ Reconnected successfully[/bold green]")
             self.comms_status_widget.set_status(False)
             self.connected = True
 
@@ -698,9 +694,9 @@ class ModbusTUI(App):
             self.set_interval(TUI_HEARTBEAT_RESET_RATE, self.reset_heartbeat)
 
             # Hide connection status after 2 seconds
-            self.set_timer(2.0, lambda: self.connection_status_widget.update(""))
+            self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
         else:
-            self.connection_status_widget.update("[bold red]✗ Reconnection failed - Check event log[/bold red]")
+            self.comms_status_widget.update("[bold red]✗ Reconnection failed - Check event log[/bold red]")
 
     def poll_and_update(self) -> None:
         """Poll Modbus devices, log data, and update display."""
