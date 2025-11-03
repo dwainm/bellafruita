@@ -710,21 +710,23 @@ class ModbusTUI(App):
 
         # Update input widget states
         if hasattr(self.controller.input_client, 'inputs'):
-            # Mock mode - read from inputs dict
-            for i in range(1, 17):
-                state = self.controller.input_client.inputs[i]['state']
-                self.input_widgets[i].state = state
+            # Mock mode - read from inputs dict (1-indexed addresses)
+            for address, input_info in self.controller.input_client.inputs.items():
+                if address in self.input_widgets:
+                    self.input_widgets[address].state = input_info['state']
         else:
-            # Real hardware - use the data we just read
-            labels = ['S1', 'S2', 'CS1', 'CS2', 'CS3', 'M1_Trip', 'M2_Trip', 'E_Stop',
-                     'Manual_Select', 'Auto_Select', 'Manual_Forward', 'Manual_Reverse',
-                     'M1_TC', 'M2_TC', 'PALM_Run', 'DHLM_Trip']
-            for i in range(1, 17):
-                label = labels[i - 1]
-                self.input_widgets[i].state = input_data.get(label, False)
+            # Real hardware - use the data we just read (label-based)
+            for address, widget in self.input_widgets.items():
+                # Convert address (1-indexed) to 0-indexed for MODBUS_MAP lookup
+                map_address = address - 1
+                from src.modbus.mapping import MODBUS_MAP
+                map_info = MODBUS_MAP['INPUT']['coils'].get(map_address, {})
+                label = map_info.get('label', '')
+                if label:
+                    widget.state = input_data.get(label, False)
 
         # Update register display
-        self.holding_register_0 = output_data.get('REG0', 0)
+        self.holding_register_0 = output_data.get('VERSION', 0)
         if not self.editable:
             label = self.query_one("#register_0_display", Label)
             label.update(str(self.holding_register_0))
