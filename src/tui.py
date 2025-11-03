@@ -96,25 +96,62 @@ class ActiveRulesWidget(Static):
 
 
 class CommsStatusWidget(Static):
-    """Widget showing communication status and retry button."""
+    """Widget showing communication status, heartbeat indicators, and retry button."""
+
+    input_beat = reactive(False)
+    output_beat = reactive(False)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._initialized = False
         self._status_text = None
         self._retry_button = None
+        self._input_indicator = None
+        self._output_indicator = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
         with Horizontal(classes="comms-status-row"):
+            # Heartbeat indicators on the left
+            yield Label("INPUT:", classes="heartbeat-label")
+            yield Label("○", id="input_indicator", classes="heartbeat-indicator")
+            yield Label("OUTPUT:", classes="heartbeat-label")
+            yield Label("○", id="output_indicator", classes="heartbeat-indicator")
+            # Status in the center
             yield Static("[dim]Waiting for connection attempt...[/dim]", id="comms_status_text", classes="comms-status-text")
+            # Retry button on the right
             yield Button("Retry Connection", id="retry_button", variant="warning", classes="retry-button")
 
     def on_mount(self) -> None:
         """Called when widget is mounted."""
         self._status_text = self.query_one("#comms_status_text", Static)
         self._retry_button = self.query_one("#retry_button", Button)
+        self._input_indicator = self.query_one("#input_indicator", Label)
+        self._output_indicator = self.query_one("#output_indicator", Label)
         self._retry_button.display = False  # Hide retry button initially
+
+    def watch_input_beat(self, value: bool) -> None:
+        """Update input heartbeat indicator."""
+        if self._input_indicator:
+            self._input_indicator.update("●" if value else "○")
+
+    def watch_output_beat(self, value: bool) -> None:
+        """Update output heartbeat indicator."""
+        if self._output_indicator:
+            self._output_indicator.update("●" if value else "○")
+
+    def pulse_input(self) -> None:
+        """Pulse input indicator."""
+        self.input_beat = True
+
+    def pulse_output(self) -> None:
+        """Pulse output indicator."""
+        self.output_beat = True
+
+    def reset_pulses(self) -> None:
+        """Reset both pulses."""
+        self.input_beat = False
+        self.output_beat = False
 
     def set_status(self, dead: bool) -> None:
         """Update comms status."""
@@ -130,44 +167,6 @@ class CommsStatusWidget(Static):
             # Comms OK - show connected
             self._status_text.update("[bold black on green] ✓ CONNECTED [/bold black on green]")
             self._retry_button.display = False
-
-
-class HeartbeatWidget(Static):
-    """Widget showing heartbeat indicators for INPUT and OUTPUT modules."""
-
-    input_beat = reactive(False)
-    output_beat = reactive(False)
-
-    def compose(self) -> ComposeResult:
-        """Create child widgets."""
-        with Horizontal(classes="heartbeat-row"):
-            yield Label("INPUT: ", classes="heartbeat-label")
-            yield Label("○", id="input_indicator", classes="heartbeat-indicator")
-            yield Label("  OUTPUT: ", classes="heartbeat-label")
-            yield Label("○", id="output_indicator", classes="heartbeat-indicator")
-
-    def watch_input_beat(self, value: bool) -> None:
-        """Update input heartbeat indicator."""
-        indicator = self.query_one("#input_indicator", Label)
-        indicator.update("●" if value else "○")
-
-    def watch_output_beat(self, value: bool) -> None:
-        """Update output heartbeat indicator."""
-        indicator = self.query_one("#output_indicator", Label)
-        indicator.update("●" if value else "○")
-
-    def pulse_input(self) -> None:
-        """Pulse input indicator."""
-        self.input_beat = True
-
-    def pulse_output(self) -> None:
-        """Pulse output indicator."""
-        self.output_beat = True
-
-    def reset_pulses(self) -> None:
-        """Reset both pulses."""
-        self.input_beat = False
-        self.output_beat = False
 
 
 class EventLogWidget(Static):
@@ -325,12 +324,6 @@ class ModbusTUI(App):
         height: auto;
     }
 
-    #register-container {
-        height: auto;
-        border: solid $primary;
-        padding: 1;
-    }
-
     .section-title {
         text-style: bold;
         color: $accent;
@@ -368,6 +361,16 @@ class ModbusTUI(App):
         color: $text;
     }
 
+    .register-label-compact {
+        width: 12;
+        color: $text;
+    }
+
+    .register-display-compact {
+        width: 10;
+        color: $success;
+    }
+
     Input {
         width: 20;
     }
@@ -387,30 +390,22 @@ class ModbusTUI(App):
     .comms-status-text {
         width: auto;
         text-align: center;
+        margin-left: 2;
     }
 
     .retry-button {
         margin-left: 2;
     }
 
-    #heartbeat-container {
-        height: auto;
-        border: solid $primary;
-        padding: 1;
-        margin-bottom: 1;
-    }
-
-    .heartbeat-row {
-        height: auto;
-    }
-
     .heartbeat-label {
         color: $text;
+        margin-left: 1;
     }
 
     .heartbeat-indicator {
         color: $warning;
         text-align: center;
+        margin-right: 1;
     }
 
     #active-rules-container {
@@ -470,7 +465,6 @@ class ModbusTUI(App):
         self.input_widgets = {}
         self.register_input = None
         self.comms_status_widget = None
-        self.heartbeat_widget = None
         self.event_widget = None
         self.active_rules_widget = None
         self.log_widget = None
@@ -486,14 +480,14 @@ class ModbusTUI(App):
             # mode = "MOCK MODE (Editable)" if self.editable else "LIVE MODE (Read-Only)"
             # yield Static(f"[bold]{mode}[/bold]", classes="section-title")
 
-            # Comms status section
+            # Comms status section (now includes heartbeat)
             with Container(id="comms-status-container"):
                 self.comms_status_widget = CommsStatusWidget()
                 yield self.comms_status_widget
 
-            # Inputs section - Two columns
+            # Inputs section - Two columns (now includes holding registers)
             with Container(id="inputs-container"):
-                yield Static("Input Coils", classes="section-title")
+                yield Static("Input Coils & Registers", classes="section-title")
 
                 # Import MODBUS_MAP to get input labels and descriptions
                 from src.modbus.mapping import MODBUS_MAP
@@ -517,7 +511,7 @@ class ModbusTUI(App):
                             self.input_widgets[i] = widget
                             yield widget
 
-                    # Right column (inputs 9-16)
+                    # Right column (inputs 9-16 + holding register)
                     with Vertical(classes="input-column"):
                         for i in range(9, 17):
                             # Get info from MODBUS_MAP (0-indexed address)
@@ -534,34 +528,25 @@ class ModbusTUI(App):
                             )
                             self.input_widgets[i] = widget
                             yield widget
+                        
+                        # Add holding register at bottom of right column
+                        with Horizontal(classes="register-row"):
+                            yield Label("REG0 (Ver):", classes="register-label-compact")
 
-            # Register section
-            with Container(id="register-container"):
-                yield Static("Holding Registers", classes="section-title")
-
-                with Horizontal(classes="register-row"):
-                    yield Label("Register 0 (Version):", classes="register-label")
-
-                    if self.editable:
-                        self.register_input = Input(
-                            value=str(self.holding_register_0),
-                            placeholder="Enter value",
-                            type="integer",
-                            id="register_0_input"
-                        )
-                        yield self.register_input
-                    else:
-                        yield Label(
-                            str(self.holding_register_0),
-                            id="register_0_display",
-                            classes="register-label"
-                        )
-
-            # Heartbeat section
-            with Container(id="heartbeat-container"):
-                yield Static("Heartbeat", classes="section-title")
-                self.heartbeat_widget = HeartbeatWidget()
-                yield self.heartbeat_widget
+                            if self.editable:
+                                self.register_input = Input(
+                                    value=str(self.holding_register_0),
+                                    placeholder="Enter value",
+                                    type="integer",
+                                    id="register_0_input"
+                                )
+                                yield self.register_input
+                            else:
+                                yield Label(
+                                    str(self.holding_register_0),
+                                    id="register_0_display",
+                                    classes="register-display-compact"
+                                )
 
             # Active rules section (if rule engine provided)
             if self.rule_engine:
@@ -702,11 +687,11 @@ class ModbusTUI(App):
         """Poll Modbus devices, log data, and update display."""
         # Read and log all inputs
         input_data = self.controller.read_and_log_all_inputs()
-        self.heartbeat_widget.pulse_input()
+        self.comms_status_widget.pulse_input()
 
         # Read and log all outputs
         output_data = self.controller.read_and_log_all_outputs()
-        self.heartbeat_widget.pulse_output()
+        self.comms_status_widget.pulse_output()
 
         # Evaluate rules if rule engine is present
         if self.rule_engine:
@@ -759,7 +744,7 @@ class ModbusTUI(App):
 
     def reset_heartbeat(self) -> None:
         """Reset heartbeat indicators."""
-        self.heartbeat_widget.reset_pulses()
+        self.comms_status_widget.reset_pulses()
 
     def watch_holding_register_0(self, new_value: int) -> None:
         """Called when holding register changes."""
