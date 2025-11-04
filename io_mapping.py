@@ -15,10 +15,12 @@ MODBUS_MAP = {
             5: {'label': 'M1_Trip', 'description': 'Conveyor 1 Motor Drive Trip'},
             6: {'label': 'M2_Trip', 'description': 'Conveyor 2 Motor Drive Trip'},
             7: {'label': 'E_Stop', 'description': 'Emergency Stop Button'},
-            8: {'label': 'Manual_Select', 'description': 'Selector Switch Manual'},
+           # 8: {'label': 'Manual_Select', 'description': 'Selector Switch Manual'},
             9: {'label': 'Auto_Select', 'description': 'Selector Switch Auto'},
             10: {'label': 'Klaar_Geweeg_Btn', 'description': 'Klaar Geweeg Button (Ready Weighed)'},
-            11: {'label': 'Reset_Btn', 'description': 'System Reset Button'},
+            11: {'label': 'CPS_1', 'description': 'Crate position sensor 1'},
+            12: {'label': 'CPS_2', 'description': 'Crate position sensor 2'},
+            13: {'label': 'Reset_Btn', 'description': 'System Reset Button'},
             14: {'label': 'PALM_Run_Signal', 'description': 'PALM Chemtrack Run Signal'},
             15: {'label': 'DHLM_Trip_Signal', 'description': 'DHLM Chemtrack Trip Signal'},
         },
@@ -28,10 +30,10 @@ MODBUS_MAP = {
     },
     'OUTPUT': {
         'coils': {
-            0: {'label': 'MOTOR_1', 'description': 'Conveyor 1 Motor'},
+            # 0: {'label': 'LED_GREEN', 'description': 'Conveyor 1 Motor'},
             1: {'label': 'MOTOR_2', 'description': 'Conveyor 2 Motor'},
             2: {'label': 'MOTOR_3', 'description': 'Conveyor 3 Motor'},
-            # 3: {'label': 'MOTOR_4', 'description': 'Auxiliary Motor'},
+            # 3: {'label': 'LED_RED', 'description': 'Auxiliary Motor'},
         },
         'registers': {
             0: {'label': 'VERSION', 'description': 'Firmware Version Number'},
