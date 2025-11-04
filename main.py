@@ -6,6 +6,7 @@ from src.modbus import create_modbus_client, Procon, MODBUS_MAP, get_all_labels
 from src.logging_system import LogManager
 from src.tui import run_tui
 from src.rule_engine import RuleEngine
+from src.polling_thread import PollingThread, SystemState
 
 
 class ConveyorController:
@@ -236,19 +237,42 @@ def main():
     from rules import setup_rules
     setup_rules(rule_engine)
 
+    # Create shared state for thread-safe communication
+    shared_state = SystemState()
+
+    # Create and start background polling thread
+    polling_thread = PollingThread(
+        controller=controller,
+        rule_engine=rule_engine,
+        state=shared_state,
+        poll_interval=config.system.poll_interval
+    )
+
     try:
+        # Start polling thread BEFORE TUI (so data is ready)
+        polling_thread.start()
+        controller.log_manager.info("Background polling thread started")
+
         # Run with TUI (editable in mock mode, read-only in real mode)
+        # TUI now just renders state, never blocks on I/O
         run_tui(
             controller=controller,
             rule_engine=rule_engine,
             config=config,
-            editable=config.use_mock
+            editable=config.use_mock,
+            shared_state=shared_state
         )
 
     except KeyboardInterrupt:
         controller.log_manager.info("Shutting down")
         controller.motor_one_off()
     finally:
+        # Stop polling thread
+        controller.log_manager.info("Stopping polling thread...")
+        polling_thread.stop()
+        polling_thread.join(timeout=2.0)
+
+        # Close connections
         controller.close()
         controller.log_manager.info("Connections closed")
 

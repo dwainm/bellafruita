@@ -458,6 +458,7 @@ class ModbusTUI(App):
         rule_engine=None,
         config=None,
         editable: bool = False,
+        shared_state=None,
         **kwargs
     ):
         """Initialize TUI.
@@ -467,12 +468,14 @@ class ModbusTUI(App):
             rule_engine: RuleEngine instance (optional)
             config: Application configuration (optional)
             editable: If True, show editable controls (mock mode)
+            shared_state: SystemState instance for thread-safe data sharing
         """
         super().__init__(**kwargs)
         self.controller = controller
         self.rule_engine = rule_engine
         self.config = config
         self.editable = editable
+        self.shared_state = shared_state  # Thread-safe shared state
         self.input_widgets = {}
         self.register_input = None
         self.comms_status_widget = None
@@ -480,7 +483,8 @@ class ModbusTUI(App):
         self.active_rules_widget = None
         self.log_widget = None
         self.connected = False
-        self.last_comms_retry_time = 0  # Track when we last tried reading during comms failure
+        self.last_input_heartbeat = 0  # Track heartbeat changes
+        self.last_output_heartbeat = 0
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -583,20 +587,19 @@ class ModbusTUI(App):
         # Use config if available, otherwise use defaults
         tui_config = self.config.tui if self.config else None
         log_refresh_rate = tui_config.log_refresh_rate if tui_config else 3.0
+        render_rate = tui_config.poll_rate if tui_config else 0.1
+        heartbeat_reset_rate = tui_config.heartbeat_reset_rate if tui_config else 0.25
 
-        # Always set up log display update so users can see event messages
+        # Set up rendering intervals (fast, non-blocking)
         self.set_interval(log_refresh_rate, self.update_log_display)
+        self.set_interval(render_rate, self.render_state)  # Render shared state
+        self.set_interval(heartbeat_reset_rate, self.reset_heartbeat)
 
         # Attempt connection after TUI is fully loaded (0.5 second delay)
         self.set_timer(0.5, self.attempt_connection)
 
     def attempt_connection(self) -> None:
         """Attempt to connect to Modbus terminals."""
-        # Use config if available, otherwise use defaults
-        tui_config = self.config.tui if self.config else None
-        poll_rate = tui_config.poll_rate if tui_config else 0.1
-        heartbeat_reset_rate = tui_config.heartbeat_reset_rate if tui_config else 0.25
-
         # Show connecting message
         self.comms_status_widget.update("[bold cyan]Connecting to Modbus terminals...[/bold cyan]")
         self.controller.log_manager.info("Connecting to Modbus terminals...")
@@ -605,17 +608,21 @@ class ModbusTUI(App):
 
         if self.connected:
             self.comms_status_widget.update("[bold green]✓ Connected to Modbus terminals[/bold green]")
+            # Update shared state
+            if self.shared_state:
+                with self.shared_state.lock:
+                    self.shared_state.connected = True
             # Update comms status to connected
             if self.comms_status_widget:
                 self.comms_status_widget.set_status(False)
             # Hide connection status after 2 seconds
             self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
-
-            # Start polling only if connected
-            self.set_interval(poll_rate, self.poll_and_update)
-            self.set_interval(heartbeat_reset_rate, self.reset_heartbeat)
         else:
             self.comms_status_widget.update("[bold red]✗ Failed to connect - Check event log[/bold red]")
+            # Update shared state
+            if self.shared_state:
+                with self.shared_state.lock:
+                    self.shared_state.connected = False
             # Set comms dead status
             if self.comms_status_widget:
                 self.comms_status_widget.set_status(True)
@@ -686,73 +693,50 @@ class ModbusTUI(App):
             self.comms_status_widget.set_status(False)
             self.connected = True
 
-            # Start polling if not already running
-            # Use config if available, otherwise use defaults
-            tui_config = self.config.tui if self.config else None
-            poll_rate = tui_config.poll_rate if tui_config else 0.1
-            heartbeat_reset_rate = tui_config.heartbeat_reset_rate if tui_config else 0.25
-            self.set_interval(poll_rate, self.poll_and_update)
-            self.set_interval(heartbeat_reset_rate, self.reset_heartbeat)
+            # Update shared state
+            if self.shared_state:
+                with self.shared_state.lock:
+                    self.shared_state.connected = True
+
+            # Background polling thread will automatically resume polling
+            # No need to start intervals here - rendering continues automatically
 
             # Hide connection status after 2 seconds
             self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
         else:
             self.comms_status_widget.update("[bold red]✗ Reconnection failed - Check event log[/bold red]")
 
-    def poll_and_update(self) -> None:
-        """Poll Modbus devices, log data, and update display."""
-        import time
+    def render_state(self) -> None:
+        """Render UI from shared state - NEVER BLOCKS!
 
-        # Check if comms are already known to be failed
-        comms_failed = False
-        if self.rule_engine:
-            comms_failed = self.rule_engine.state.get('COMMS_FAILED', False)
-        else:
-            comms_failed = self.controller.comms_dead
+        This method only reads from thread-safe shared state and updates widgets.
+        All blocking I/O happens in the background polling thread.
+        """
+        if not self.shared_state:
+            return  # No shared state, nothing to render
 
-        # Skip expensive Modbus reads if comms are already dead
-        # But do periodic retries (every 3 seconds) to detect recovery
-        should_read = True
-        if comms_failed:
-            current_time = time.time()
-            if current_time - self.last_comms_retry_time < 3.0:
-                # Too soon, skip this read to avoid lag
-                should_read = False
-            else:
-                # Time for a retry attempt
-                self.last_comms_retry_time = current_time
-                should_read = True
+        # Get thread-safe snapshot of state (very fast)
+        snapshot = self.shared_state.get_snapshot()
 
-        if should_read:
-            # Read and log all inputs
-            input_data = self.controller.read_and_log_all_inputs()
+        input_data = snapshot['input_data']
+        output_data = snapshot['output_data']
+        comms_failed = snapshot['comms_failed']
+        input_heartbeat = snapshot['input_heartbeat']
+        output_heartbeat = snapshot['output_heartbeat']
 
-            # Read and log all outputs
-            output_data = self.controller.read_and_log_all_outputs()
-        else:
-            # Comms failed and not time to retry - use empty data to avoid blocking
-            input_data = {}
-            output_data = {}
+        # Update comms status
+        self.comms_status_widget.set_status(comms_failed)
 
-        # Evaluate rules if rule engine is present
-        if self.rule_engine:
-            # Combine input and output data for rule evaluation
-            sensor_data = {**input_data, **output_data}
-            self.rule_engine.evaluate(sensor_data)
+        # Pulse heartbeat indicators if data is fresh (heartbeat changed)
+        if input_heartbeat != self.last_input_heartbeat:
+            self.last_input_heartbeat = input_heartbeat
+            if not comms_failed:
+                self.comms_status_widget.pulse_input()
 
-            # Update comms status widget using rule engine state
-            comms_failed = self.rule_engine.state.get('COMMS_FAILED', False)
-            self.comms_status_widget.set_status(comms_failed)
-        else:
-            # Fallback: no rule engine, use controller's comms_dead flag
-            self.controller.check_and_handle_comms_failure()
-            comms_failed = self.controller.comms_dead
-            self.comms_status_widget.set_status(comms_failed)
-
-        # Only pulse heartbeat indicators if comms are healthy
-        if not comms_failed:
-            self.comms_status_widget.pulse_input()
-            self.comms_status_widget.pulse_output()
+        if output_heartbeat != self.last_output_heartbeat:
+            self.last_output_heartbeat = output_heartbeat
+            if not comms_failed:
+                self.comms_status_widget.pulse_output()
 
         # Update input widget states
         if hasattr(self.controller.input_client, 'inputs'):
@@ -787,10 +771,11 @@ class ModbusTUI(App):
         events = self.controller.log_manager.get_recent_events(count=10)
         self.event_widget.update_events(events, count=10)
 
-        # Update active rules display
-        if self.rule_engine and self.active_rules_widget:
-            active_rules = self.rule_engine.get_active_rules()
-            state = self.rule_engine.get_state()
+        # Update active rules display from shared state (thread-safe)
+        if self.active_rules_widget and self.shared_state:
+            snapshot = self.shared_state.get_snapshot()
+            active_rules = snapshot['active_rules']
+            state = snapshot['rule_state']
             self.active_rules_widget.update_rules(active_rules, state)
 
     def reset_heartbeat(self) -> None:
@@ -803,7 +788,7 @@ class ModbusTUI(App):
             self.register_input.value = str(new_value)
 
 
-def run_tui(controller, rule_engine=None, config=None, editable: bool = False):
+def run_tui(controller, rule_engine=None, config=None, editable: bool = False, shared_state=None):
     """Run the Textual TUI.
 
     Args:
@@ -811,11 +796,13 @@ def run_tui(controller, rule_engine=None, config=None, editable: bool = False):
         rule_engine: RuleEngine instance (optional)
         config: Application configuration (optional)
         editable: If True, show editable controls (mock mode)
+        shared_state: SystemState instance for thread-safe data sharing
     """
     app = ModbusTUI(
         controller=controller,
         rule_engine=rule_engine,
         config=config,
-        editable=editable
+        editable=editable,
+        shared_state=shared_state
     )
     app.run()
