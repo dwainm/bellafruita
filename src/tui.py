@@ -480,6 +480,7 @@ class ModbusTUI(App):
         self.active_rules_widget = None
         self.log_widget = None
         self.connected = False
+        self.last_comms_retry_time = 0  # Track when we last tried reading during comms failure
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -700,11 +701,38 @@ class ModbusTUI(App):
 
     def poll_and_update(self) -> None:
         """Poll Modbus devices, log data, and update display."""
-        # Read and log all inputs
-        input_data = self.controller.read_and_log_all_inputs()
+        import time
 
-        # Read and log all outputs
-        output_data = self.controller.read_and_log_all_outputs()
+        # Check if comms are already known to be failed
+        comms_failed = False
+        if self.rule_engine:
+            comms_failed = self.rule_engine.state.get('COMMS_FAILED', False)
+        else:
+            comms_failed = self.controller.comms_dead
+
+        # Skip expensive Modbus reads if comms are already dead
+        # But do periodic retries (every 3 seconds) to detect recovery
+        should_read = True
+        if comms_failed:
+            current_time = time.time()
+            if current_time - self.last_comms_retry_time < 3.0:
+                # Too soon, skip this read to avoid lag
+                should_read = False
+            else:
+                # Time for a retry attempt
+                self.last_comms_retry_time = current_time
+                should_read = True
+
+        if should_read:
+            # Read and log all inputs
+            input_data = self.controller.read_and_log_all_inputs()
+
+            # Read and log all outputs
+            output_data = self.controller.read_and_log_all_outputs()
+        else:
+            # Comms failed and not time to retry - use empty data to avoid blocking
+            input_data = {}
+            output_data = {}
 
         # Evaluate rules if rule engine is present
         if self.rule_engine:
