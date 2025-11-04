@@ -56,7 +56,7 @@ class CommsResetRule(Rule):
         # Check if reset button pressed and comms currently failed
         return (
             state.get('COMMS_FAILED', False) and
-            data.get('Reset_Btn', False)
+            not data.get('Auto_Select')
         )
 
     def action(self, controller, state):
@@ -80,20 +80,26 @@ class ReadyRule(Rule):
     def condition(self, data, state):
         """Check if all conditions for READY are met."""
         return (
-            data.get('Auto_Select', False) and
-            not state.get('COMMS_FAILED', False) and  # Cannot be READY if comms failed
-            not state.get('E_STOP_TRIGGERED', False) and  # Cannot be READY until E_Stop reset
-            not data.get('M1_Trip', False) and  # Trip signals are normally closed (FALSE = OK, TRUE = tripped)
-            not data.get('M2_Trip', False) and
-            not data.get('DHLM_Trip_Signal', False) and
-            not data.get('E_Stop', False)  # E_Stop FALSE = not pressed
+            data.get('Auto_Select') and
+            not state.get('COMMS_FAILED') and  # Cannot be READY if comms failed
+            not state.get('E_STOP_TRIGGERED') and  # Cannot be READY until E_Stop reset
+            data.get('M1_Trip') and  # Trip signals are normally closed (FALSE = TRIPPED, TRUE = ok)
+            data.get('M2_Trip') and
+            data.get('DHLM_Trip_Signal') and
+            data.get('E_Stop')  # E_Stop TRUE = not pressed
         )
 
     def action(self, controller, state):
         """Set READY state."""
+
         if not state.get('READY', False):
             state['READY'] = True
             controller.log_manager.info("System is READY")
+            controller.procon.set('output', 'MOTOR_2', False)
+            controller.procon.set('output', 'MOTOR_3', False)
+            controller.log_manager.info("READY: Motors OFF ")
+            state.pop('TIMER_1_START', None)
+            state.pop('TIMER_2_START', None)
 
 
 class ClearReadyRule(Rule):
@@ -105,22 +111,21 @@ class ClearReadyRule(Rule):
     def condition(self, data, state):
         """Check if READY should be cleared."""
         ready_conditions = (
-            data.get('Auto_Select', False) and
-            not state.get('COMMS_FAILED', False) and
-            not state.get('E_STOP_TRIGGERED', False) and
-            not data.get('M1_Trip', False) and
-            not data.get('M2_Trip', False) and
-            not data.get('DHLM_Trip_Signal', False) and
-            not data.get('E_Stop', False)
+            not data.get('Auto_Select') or
+            state.get('COMMS_FAILED') or
+            state.get('E_STOP_TRIGGERED') or
+            not data.get('M1_Trip') or
+            not data.get('M2_Trip') or
+            not data.get('DHLM_Trip_Signal') or
+            not data.get('E_Stop')
         )
-        return state.get('READY', False) and not ready_conditions
+        return state.get('READY') and ready_conditions
 
     def action(self, controller, state):
         """Clear READY state and stop motors."""
         state['READY'] = False
-        # Comment out motor actions
-        # controller.procon.set('output', 'MOTOR_2', False)
-        # controller.procon.set('output', 'MOTOR_3', False)
+        controller.procon.set('output', 'MOTOR_2', False)
+        controller.procon.set('output', 'MOTOR_3', False)
         controller.log_manager.warning("System no longer READY - motors would stop")
 
 
@@ -133,19 +138,36 @@ class StartConveyor2Rule(Rule):
     def condition(self, data, state):
         """Check if we can start Conveyor 2."""
         return (
-            state.get('READY', False) and
-            data.get('PALM_Run_Signal', False) and
-            not data.get('S2', False) and
-            data.get('Klaar_Geweeg_Btn', False)  # Momentary button
+            state.get('READY') and
+            data.get('PALM_Run_Signal') and
+            not data.get('S2') and
+            data.get('Klaar_Geweeg_Btn')  # Momentary button
         )
 
     def action(self, controller, state):
         """Start Conveyor 2."""
-        # Comment out actual motor start
-        # controller.procon.set('output', 'MOTOR_2', True)
+        controller.procon.set('output', 'MOTOR_2', True)
         state['CONVEYOR_2_RUN'] = True
         controller.log_manager.info("Conveyor 2 START triggered (motor action commented out)")
 
+class StopConveyor2Rule(Rule):
+    """Start Conveyor 2 when button pressed and conditions met."""
+
+    def __init__(self):
+        super().__init__("Stop Conveyor 2")
+
+    def condition(self, data, state):
+        """Check if we can stop Conveyor 2."""
+        return (
+            state.get('CONVEYOR_2_RUN') and
+            data.get('S2')
+        )
+
+    def action(self, controller, state):
+        """Start Conveyor 2."""
+        controller.procon.set('output', 'MOTOR_2', False)
+        state['CONVEYOR_2_RUN'] = False
+        controller.log_manager.info("Conveyor 2 STOP triggered")
 
 class Timer1StartRule(Rule):
     """Start 30-second timer when READY and S1 is FALSE."""
@@ -156,8 +178,8 @@ class Timer1StartRule(Rule):
     def condition(self, data, state):
         """Check if timer should start."""
         return (
-            state.get('READY', False) and
-            not data.get('S1', False) and
+            state.get('READY') and
+            not data.get('S1') and
             'TIMER_1_START' not in state
         )
 
@@ -179,21 +201,20 @@ class Conveyor3StartWithTimerRule(Rule):
         timer_elapsed = timer_started > 0 and (time.time() - timer_started) >= 30
 
         return (
-            state.get('READY', False) and
-            state.get('CONVEYOR_2_RUN', False) and
-            data.get('S2', False) and
+            state.get('READY') and
+            state.get('CONVEYOR_2_RUN') and
+            data.get('S2') and
             timer_elapsed
         )
 
     def action(self, controller, state):
         """Start Conveyor 3."""
-        # Comment out actual motor start
-        # controller.procon.set('output', 'MOTOR_3', True)
+        controller.procon.set('output', 'MOTOR_3', True)
         state['CONVEYOR_3_RUN'] = True
         controller.log_manager.info("Conveyor 3 START triggered (motor action commented out)")
 
 
-class StopConveyorsOnS2FalseRule(Rule):
+class StartConveyor3Timer(Rule):
     """Stop both conveyors when S2 becomes FALSE."""
 
     def __init__(self):
@@ -202,63 +223,63 @@ class StopConveyorsOnS2FalseRule(Rule):
     def condition(self, data, state):
         """Check if conveyors should stop."""
         return (
-            not data.get('S2', False) and
-            (state.get('CONVEYOR_2_RUN', False) or state.get('CONVEYOR_3_RUN', False))
+             data.get('S1') and
+             state.get('CONVEYOR_3_RUN')
         )
 
     def action(self, controller, state):
-        """Stop both conveyors."""
-        # Comment out actual motor stops
-        # controller.procon.set('output', 'MOTOR_2', False)
-        # controller.procon.set('output', 'MOTOR_3', False)
-        state['CONVEYOR_2_RUN'] = False
-        state['CONVEYOR_3_RUN'] = False
-        state.pop('TIMER_1_START', None)  # Reset timer
-        controller.log_manager.info("Conveyors 2 & 3 STOP triggered (motor actions commented out)")
+        state['TIMER_2_START'] = time.time()
+        controller.log_manager.info("Timer 2 started (2 seconds)")
 
-
-class PALMChaintrackControlRule(Rule):
-    """Control conveyors based on PALM Chaintrack run signal."""
+class StopConveyor3After2seconds(Rule):
+    """Stop Conveyor 3 2 seconds after Sensor 1 TRUE"""
 
     def __init__(self):
-        super().__init__("PALM Chaintrack Control")
+        super().__init__("Start Conveyor 3 with Timer")
 
     def condition(self, data, state):
-        """Check PALM run signal and S2 state."""
-        palm_running = data.get('PALM_Run_Signal', False)
-        s2_active = data.get('S2', False)
+        """Check if Conveyor 3 should start."""
+        timer_started = state.get('TIMER_2_START', 0)
+        timer_elapsed = timer_started > 0 and (time.time() - timer_started) >= 2
 
-        # Start condition: PALM running and S2 not active
-        start_condition = palm_running and not s2_active and not state.get('PALM_CONVEYOR_ACTIVE', False)
-
-        # Stop condition: S2 becomes active while PALM conveyors running
-        stop_condition = s2_active and state.get('PALM_CONVEYOR_ACTIVE', False)
-
-        return start_condition or stop_condition
+        return (
+            timer_elapsed
+        )
 
     def action(self, controller, state):
-        """Start or stop conveyors based on PALM signal."""
-        palm_running = controller.procon.get('input', 'PALM_Run_Signal')
-        s2_active = controller.procon.get('input', 'S2')
+        """Start Conveyor 3."""
+        controller.procon.set('output', 'MOTOR_3', False)
+        state['CONVEYOR_3_RUN'] = False
+        state.pop('TIMER_2_START', None)
+        controller.log_manager.info("Conveyor 3 STOP triggered after timer")
 
-        if palm_running and not s2_active:
-            # Start conveyors
-            # Comment out actual motor starts
-            # controller.procon.set('output', 'MOTOR_2', True)
-            # controller.procon.set('output', 'MOTOR_3', True)
-            state['PALM_CONVEYOR_ACTIVE'] = True
-            state['CONVEYOR_2_RUN'] = True
-            state['CONVEYOR_3_RUN'] = True
-            controller.log_manager.info("PALM: Conveyors 2 & 3 START (motor actions commented out)")
-        elif s2_active:
-            # Stop conveyors
-            # Comment out actual motor stops
-            # controller.procon.set('output', 'MOTOR_2', False)
-            # controller.procon.set('output', 'MOTOR_3', False)
-            state['PALM_CONVEYOR_ACTIVE'] = False
-            state['CONVEYOR_2_RUN'] = False
-            state['CONVEYOR_3_RUN'] = False
-            controller.log_manager.info("PALM: Conveyors 2 & 3 STOP on S2 active (motor actions commented out)")
+
+class MoveBinFrom3to2(Rule):
+    """Start Conveyor 3 when Conveyor 2 running and S2 active after timer."""
+
+    def __init__(self):
+        super().__init__("Start Conveyor 3 with Timer")
+
+    def condition(self, data, state):
+        """Check if Conveyor 3 should start."""
+        timer_started = state.get('TIMER_1_START', 0)
+        timer_elapsed = timer_started > 0 and (time.time() - timer_started) >= 30
+
+        return (
+            state.get('READY') and
+            data.get('S2') and
+            timer_elapsed
+        )
+
+    def action(self, controller, state):
+        """Start Conveyor 3."""
+        controller.procon.set('output', 'MOTOR_2', True)
+        controller.procon.set('output', 'MOTOR_3', True)
+        state['CONVEYOR_3_RUN'] = True
+        state['CONVEYOR_2_RUN'] = True
+        state['CONVEYOR_2_AND_RUN'] = True
+        state.pop('TIMER_1_START', None)
+        controller.log_manager.info("Conveyor 3 and 2 START triggered")
 
 
 class Conveyor3DependencyRule(Rule):
@@ -290,7 +311,7 @@ class EmergencyStopRule(Rule):
 
     def condition(self, data, state):
         """Check if emergency stop button is pressed."""
-        return data.get('E_Stop', False) and not state.get('E_STOP_TRIGGERED', False)
+        return not data.get('E_Stop')
 
     def action(self, controller, state):
         """Stop all motors and set E_STOP latch."""
@@ -310,9 +331,9 @@ class EmergencyStopResetRule(Rule):
     def condition(self, data, state):
         """Check if reset button pressed and E_Stop released."""
         return (
-            state.get('E_STOP_TRIGGERED', False) and
-            not data.get('E_Stop', False) and  # E_Stop must be released
-            data.get('Reset_Btn', False)
+            state.get('E_STOP_TRIGGERED') and
+            data.get('E_Stop') and  # E_Stop must be released
+            not data.get('Auto_Select')
         )
 
     def action(self, controller, state):
@@ -345,10 +366,12 @@ def setup_rules(rule_engine):
 
     # ===== SECTION 3: Normal Operation (Conveyor Control) =====
     rule_engine.add_rule(StartConveyor2Rule())         # Start Conveyor 2 on button press
+    rule_engine.add_rule(StopConveyor2Rule())
     rule_engine.add_rule(Timer1StartRule())            # Start 30-second timer
     rule_engine.add_rule(Conveyor3StartWithTimerRule()) # Start Conveyor 3 after timer
-    rule_engine.add_rule(StopConveyorsOnS2FalseRule()) # Stop conveyors when S2 false
-    rule_engine.add_rule(PALMChaintrackControlRule())  # PALM chaintrack control
+    rule_engine.add_rule(StartConveyor3Timer()) # Stop conveyors when S2 false
+    rule_engine.add_rule(StopConveyor3After2seconds())
+    rule_engine.add_rule(MoveBinFrom3to2())
 
     # ===== SECTION 4: Safety Interlocks =====
     rule_engine.add_rule(Conveyor3DependencyRule())    # Conveyor 3 requires Conveyor 2
