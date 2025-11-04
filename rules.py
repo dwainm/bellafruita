@@ -41,15 +41,9 @@ class CommsHealthCheckRule(Rule):
         if not comms_healthy and not state.get('COMMS_FAILED', False):
             # Comms have failed - latch the failure state
             state['COMMS_FAILED'] = True
-            state['COMMS_OK'] = False
             controller.log_manager.critical("Communications FAILED - VERSION=0 for 5+ seconds. Reset required!")
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
-        elif comms_healthy and not state.get('COMMS_FAILED', False):
-            # Comms are healthy and not in failed state
-            if not state.get('COMMS_OK', False):
-                state['COMMS_OK'] = True
-                controller.log_manager.info("Communications OK - VERSION register valid")
 
 
 class CommsResetRule(Rule):
@@ -72,7 +66,6 @@ class CommsResetRule(Rule):
 
         if comms_healthy:
             state['COMMS_FAILED'] = False
-            state['COMMS_OK'] = True
             controller.log_manager.info("Communications RESET - system can now restart")
         else:
             controller.log_manager.warning("Reset attempted but communications still unhealthy")
@@ -88,12 +81,11 @@ class ReadyRule(Rule):
         """Check if all conditions for READY are met."""
         return (
             data.get('Auto_Select', False) and
-            state.get('COMMS_OK', False) and
             not state.get('COMMS_FAILED', False) and  # Cannot be READY if comms failed
             not state.get('E_STOP_TRIGGERED', False) and  # Cannot be READY until E_Stop reset
-            data.get('M1_Trip', False) and  # Trip signals are normally closed (FALSE = OK)
-            data.get('M2_Trip', False) and
-            data.get('DHLM_Trip_Signal', False) and
+            not data.get('M1_Trip', False) and  # Trip signals are normally closed (FALSE = OK, TRUE = tripped)
+            not data.get('M2_Trip', False) and
+            not data.get('DHLM_Trip_Signal', False) and
             not data.get('E_Stop', False)  # E_Stop FALSE = not pressed
         )
 
@@ -114,12 +106,11 @@ class ClearReadyRule(Rule):
         """Check if READY should be cleared."""
         ready_conditions = (
             data.get('Auto_Select', False) and
-            state.get('COMMS_OK', False) and
             not state.get('COMMS_FAILED', False) and
             not state.get('E_STOP_TRIGGERED', False) and
-            data.get('M1_Trip', False) and
-            data.get('M2_Trip', False) and
-            data.get('DHLM_Trip_Signal', False) and
+            not data.get('M1_Trip', False) and
+            not data.get('M2_Trip', False) and
+            not data.get('DHLM_Trip_Signal', False) and
             not data.get('E_Stop', False)
         )
         return state.get('READY', False) and not ready_conditions
