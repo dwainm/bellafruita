@@ -19,7 +19,7 @@ This makes the logic easy to reason about and debug, just like ladder logic.
 Order matters - add safety rules LAST to ensure they can override normal operation.
 """
 
-from src.rules import Rule
+from src.rule_engine import Rule
 import time
 
 

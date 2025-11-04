@@ -454,6 +454,7 @@ class ModbusTUI(App):
         self,
         controller,
         rule_engine=None,
+        config=None,
         editable: bool = False,
         **kwargs
     ):
@@ -462,11 +463,13 @@ class ModbusTUI(App):
         Args:
             controller: ConveyorController instance
             rule_engine: RuleEngine instance (optional)
+            config: Application configuration (optional)
             editable: If True, show editable controls (mock mode)
         """
         super().__init__(**kwargs)
         self.controller = controller
         self.rule_engine = rule_engine
+        self.config = config
         self.editable = editable
         self.input_widgets = {}
         self.register_input = None
@@ -574,18 +577,22 @@ class ModbusTUI(App):
 
     async def on_mount(self) -> None:
         """Called when app is mounted."""
-        # Import constants from main module
-        from main import TUI_POLL_RATE, TUI_LOG_REFRESH_RATE, TUI_HEARTBEAT_RESET_RATE
+        # Use config if available, otherwise use defaults
+        tui_config = self.config.tui if self.config else None
+        log_refresh_rate = tui_config.log_refresh_rate if tui_config else 3.0
 
         # Always set up log display update so users can see event messages
-        self.set_interval(TUI_LOG_REFRESH_RATE, self.update_log_display)
+        self.set_interval(log_refresh_rate, self.update_log_display)
 
         # Attempt connection after TUI is fully loaded (0.5 second delay)
         self.set_timer(0.5, self.attempt_connection)
 
     def attempt_connection(self) -> None:
         """Attempt to connect to Modbus terminals."""
-        from main import TUI_POLL_RATE, TUI_HEARTBEAT_RESET_RATE
+        # Use config if available, otherwise use defaults
+        tui_config = self.config.tui if self.config else None
+        poll_rate = tui_config.poll_rate if tui_config else 0.1
+        heartbeat_reset_rate = tui_config.heartbeat_reset_rate if tui_config else 0.25
 
         # Show connecting message
         self.comms_status_widget.update("[bold cyan]Connecting to Modbus terminals...[/bold cyan]")
@@ -602,8 +609,8 @@ class ModbusTUI(App):
             self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
 
             # Start polling only if connected
-            self.set_interval(TUI_POLL_RATE, self.poll_and_update)
-            self.set_interval(TUI_HEARTBEAT_RESET_RATE, self.reset_heartbeat)
+            self.set_interval(poll_rate, self.poll_and_update)
+            self.set_interval(heartbeat_reset_rate, self.reset_heartbeat)
         else:
             self.comms_status_widget.update("[bold red]✗ Failed to connect - Check event log[/bold red]")
             # Set comms dead status
@@ -677,9 +684,12 @@ class ModbusTUI(App):
             self.connected = True
 
             # Start polling if not already running
-            from main import TUI_POLL_RATE, TUI_HEARTBEAT_RESET_RATE
-            self.set_interval(TUI_POLL_RATE, self.poll_and_update)
-            self.set_interval(TUI_HEARTBEAT_RESET_RATE, self.reset_heartbeat)
+            # Use config if available, otherwise use defaults
+            tui_config = self.config.tui if self.config else None
+            poll_rate = tui_config.poll_rate if tui_config else 0.1
+            heartbeat_reset_rate = tui_config.heartbeat_reset_rate if tui_config else 0.25
+            self.set_interval(poll_rate, self.poll_and_update)
+            self.set_interval(heartbeat_reset_rate, self.reset_heartbeat)
 
             # Hide connection status after 2 seconds
             self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
@@ -759,13 +769,19 @@ class ModbusTUI(App):
             self.register_input.value = str(new_value)
 
 
-def run_tui(controller, rule_engine=None, editable: bool = False):
+def run_tui(controller, rule_engine=None, config=None, editable: bool = False):
     """Run the Textual TUI.
 
     Args:
         controller: ConveyorController instance
         rule_engine: RuleEngine instance (optional)
+        config: Application configuration (optional)
         editable: If True, show editable controls (mock mode)
     """
-    app = ModbusTUI(controller=controller, rule_engine=rule_engine, editable=editable)
+    app = ModbusTUI(
+        controller=controller,
+        rule_engine=rule_engine,
+        config=config,
+        editable=editable
+    )
     app.run()

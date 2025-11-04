@@ -6,7 +6,8 @@
       "WebFetch(domain:pymodbus.readthedocs.io)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(source venv/bin/activate)"
     ],
     "deny": [],
     "ask": []

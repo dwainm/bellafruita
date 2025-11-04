@@ -1,55 +1,38 @@
 """Main control logic for Bella Fruita apple sorting machine feeder."""
 
 import argparse
+from src.config import AppConfig
 from src.modbus import create_modbus_client, Procon, MODBUS_MAP, get_all_labels
 from src.logging_system import LogManager
 from src.tui import run_tui
-from src.rules import RuleEngine
-
-# ============================================================================
-# CONFIGURATION - Edit these values as needed
-# ============================================================================
-
-# Application Mode (can be overridden with --mock flag)
-USE_MOCK = False   # Default: False for production hardware
-
-# Modbus Connection Settings
-INPUT_IP = "172.20.231.25"      # IP address of input Modbus terminal (sensors)
-OUTPUT_IP = "172.20.231.49"     # IP address of output Modbus terminal (motors)
-INPUT_SLAVE_ID = 1              # Modbus slave ID for input terminal
-OUTPUT_SLAVE_ID = 1             # Modbus slave ID for output terminal
-
-# Modbus Address Mapping (Legacy - use Procon API with labels instead)
-SENSOR1_ADDRESS = 0             # Address of first sensor (use 'S1' label with Procon API)
-MOTOR_ONE_ADDRESS = 0           # Address of first motor (use 'MOTOR_1' label with Procon API)
-
-# Timing Configuration
-POLL_INTERVAL = 0.1             # Fast poll interval in seconds (100ms = 0.1)
-LOG_STACK_SIZE = 3000           # Maximum number of log entries to keep
-COMMS_TIMEOUT = 5.0             # Seconds before declaring comms dead (if REG0=0)
-
-# TUI Update Rates
-TUI_POLL_RATE = 0.1             # TUI display update rate in seconds (100ms = 10Hz)
-TUI_LOG_REFRESH_RATE = 3.0      # Log display refresh rate in seconds
-TUI_HEARTBEAT_RESET_RATE = 0.25 # Heartbeat indicator reset rate in seconds
+from src.rule_engine import RuleEngine
 
 
 class ConveyorController:
     """Controller for apple sorting conveyor system."""
 
-    def __init__(self, input_ip: str, output_ip: str, mock: bool = False):
-        """Initialize conveyor controller with input and output clients.
+    def __init__(self, config: AppConfig):
+        """Initialize conveyor controller.
 
         Args:
-            input_ip: IP address of input Modbus terminal (sensors)
-            output_ip: IP address of output Modbus terminal (motors)
-            mock: If True, use mock clients for testing
+            config: Application configuration
         """
-        self.input_client = create_modbus_client(input_ip, mock=mock)
-        self.output_client = create_modbus_client(output_ip, mock=mock)
-        self.procon = Procon(self.input_client, self.output_client, INPUT_SLAVE_ID, OUTPUT_SLAVE_ID)
-        self.mock = mock
-        self.log_manager = LogManager(max_entries=LOG_STACK_SIZE)
+        self.config = config
+        self.input_client = create_modbus_client(
+            config.modbus.input_ip,
+            mock=config.use_mock
+        )
+        self.output_client = create_modbus_client(
+            config.modbus.output_ip,
+            mock=config.use_mock
+        )
+        self.procon = Procon(
+            self.input_client,
+            self.output_client,
+            config.modbus.input_slave_id,
+            config.modbus.output_slave_id
+        )
+        self.log_manager = LogManager(max_entries=config.system.log_stack_size)
         self.comms_dead = False
 
     def connect(self) -> bool:
@@ -155,7 +138,9 @@ class ConveyorController:
         Returns:
             bool: True if comms healthy, False if dead
         """
-        comms_healthy = self.log_manager.check_comms_health(timeout_seconds=COMMS_TIMEOUT)
+        comms_healthy = self.log_manager.check_comms_health(
+            timeout_seconds=self.config.system.comms_timeout
+        )
 
         if not comms_healthy and not self.comms_dead:
             # Comms just died - emergency stop all motors
@@ -230,18 +215,14 @@ def main():
     )
     args = parser.parse_args()
 
-    # Determine if using mock mode (command-line flag overrides config)
-    use_mock = args.mock or USE_MOCK
+    # Create configuration
+    config = AppConfig.create_default(use_mock=args.mock)
 
     # Create controller
-    controller = ConveyorController(
-        input_ip=INPUT_IP,
-        output_ip=OUTPUT_IP,
-        mock=use_mock
-    )
+    controller = ConveyorController(config)
 
     # Log mode
-    mode = "MOCK" if use_mock else "LIVE"
+    mode = "MOCK" if config.use_mock else "LIVE"
     controller.log_manager.info(f"Starting in {mode} mode")
 
     # Create rule engine
@@ -253,7 +234,12 @@ def main():
 
     try:
         # Run with TUI (editable in mock mode, read-only in real mode)
-        run_tui(controller=controller, rule_engine=rule_engine, editable=use_mock)
+        run_tui(
+            controller=controller,
+            rule_engine=rule_engine,
+            config=config,
+            editable=config.use_mock
+        )
 
     except KeyboardInterrupt:
         controller.log_manager.info("Shutting down")
