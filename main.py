@@ -20,11 +20,15 @@ class ConveyorController:
         self.config = config
         self.input_client = create_modbus_client(
             config.modbus.input_ip,
-            mock=config.use_mock
+            mock=config.use_mock,
+            timeout=config.modbus.timeout,
+            retries=config.modbus.retries
         )
         self.output_client = create_modbus_client(
             config.modbus.output_ip,
-            mock=config.use_mock
+            mock=config.use_mock,
+            timeout=config.modbus.timeout,
+            retries=config.modbus.retries
         )
         self.procon = Procon(
             self.input_client,

@@ -97,7 +97,8 @@ class LogManager:
     def check_comms_health(self, timeout_seconds: float = 5.0) -> bool:
         """Check if communications are healthy based on recent logs.
 
-        Checks if version register (VERSION) has been 0 or missing for too long.
+        Checks if version register (VERSION) has been 0 or missing for too long,
+        or if we haven't received any output logs recently (indicating read failures).
 
         Args:
             timeout_seconds: How long to wait before declaring comms dead
@@ -110,6 +111,11 @@ class LogManager:
 
         current_time = time.time()
         cutoff_time = current_time - timeout_seconds
+
+        # Check if we have any recent logs at all (detects total read failure)
+        last_log_time = self.output_logs[-1].timestamp
+        if last_log_time < cutoff_time:
+            return False  # No recent logs - comms dead
 
         # Check recent output logs for valid version numbers
         for entry in reversed(self.output_logs):

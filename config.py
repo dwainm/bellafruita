@@ -10,6 +10,8 @@ class ModbusConfig:
     output_ip: str = "172.20.231.49"
     input_slave_id: int = 1
     output_slave_id: int = 1
+    timeout: float = 1.0  # Network timeout in seconds (faster detection of failures)
+    retries: int = 1  # Number of retry attempts per operation
 
 
 @dataclass
@@ -17,7 +19,7 @@ class SystemConfig:
     """Core system timing and monitoring settings."""
     poll_interval: float = 0.1
     log_stack_size: int = 3000
-    comms_timeout: float = 5.0
+    comms_timeout: float = 2.0  # Comms failure detection time (reduced for faster response)
 
 
 @dataclass
