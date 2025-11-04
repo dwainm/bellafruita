@@ -3,7 +3,7 @@
 from .interface import ModbusInterface
 from .mock import MockModbusClient
 from .factory import create_modbus_client
-from .mapping import MODBUS_MAP, get_address, get_info, get_all_labels
+from io_mapping import MODBUS_MAP, get_address, get_info, get_all_labels
 from .api import Procon
 
 # Conditionally import real client only if pymodbus is available

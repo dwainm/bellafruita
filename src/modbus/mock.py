@@ -4,7 +4,7 @@ from typing import Any
 from dataclasses import dataclass
 
 from .interface import ModbusInterface
-from .mapping import MODBUS_MAP
+from io_mapping import MODBUS_MAP
 
 
 @dataclass

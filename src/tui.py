@@ -6,7 +6,7 @@ from textual.widgets import Header, Footer, Static, Switch, Input, Label, Button
 from textual.reactive import reactive
 from textual import on
 
-from src.modbus.mapping import MODBUS_MAP
+from io_mapping import MODBUS_MAP
 
 # Constants for heartbeat indicators
 HEARTBEAT_ACTIVE = "●"
@@ -731,7 +731,7 @@ class ModbusTUI(App):
             for address, widget in self.input_widgets.items():
                 # Convert address (1-indexed) to 0-indexed for MODBUS_MAP lookup
                 map_address = address - 1
-                from src.modbus.mapping import MODBUS_MAP
+                from io_mapping import MODBUS_MAP
                 map_info = MODBUS_MAP['INPUT']['coils'].get(map_address, {})
                 label = map_info.get('label', '')
                 if label:

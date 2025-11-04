@@ -1,7 +1,7 @@
 """Main control logic for Bella Fruita apple sorting machine feeder."""
 
 import argparse
-from src.config import AppConfig
+from config import AppConfig
 from src.modbus import create_modbus_client, Procon, MODBUS_MAP, get_all_labels
 from src.logging_system import LogManager
 from src.tui import run_tui
