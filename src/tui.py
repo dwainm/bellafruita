@@ -188,7 +188,7 @@ class EventLogWidget(Static):
         """Create child widgets."""
         yield Static(self.event_text, id="event_content", markup=True)
 
-    def update_events(self, events: list, count: int = 10) -> None:
+    def update_events(self, events: list, count: int = 1000) -> None:
         """Update event display with recent entries.
 
         Args:
@@ -427,7 +427,7 @@ class ModbusTUI(App):
 
     #event-log-container {
         height: auto;
-        max-height: 12;
+        max-height: 30;
         border: solid $warning;
         padding: 1;
         margin-bottom: 1;
@@ -768,8 +768,8 @@ class ModbusTUI(App):
         self.log_widget.update_logs(input_logs, output_logs, count=5)
 
         # Update event log
-        events = self.controller.log_manager.get_recent_events(count=10)
-        self.event_widget.update_events(events, count=10)
+        events = self.controller.log_manager.get_recent_events(count=1000)
+        self.event_widget.update_events(events, count=1000)
 
         # Update active rules display from shared state (thread-safe)
         if self.active_rules_widget and self.shared_state:
