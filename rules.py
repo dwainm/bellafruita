@@ -20,7 +20,6 @@ Order matters - add safety rules LAST to ensure they can override normal operati
 """
 
 from src.rule_engine import Rule
-import time
 
 
 class CommsHealthCheckRule(Rule):
@@ -78,8 +77,8 @@ class ReadyRule(Rule):
         super().__init__("System Ready Check")
 
     def condition(self, data, state):
-        """Check if all conditions for READY are met."""
-        return (
+        """Check if all conditions for READY are met and we're in ERROR state."""
+        safety_ok = (
             data.get('Auto_Select') and
             not state.get('COMMS_FAILED') and  # Cannot be READY if comms failed
             not state.get('E_STOP_TRIGGERED') and  # Cannot be READY until E_Stop reset
@@ -88,18 +87,17 @@ class ReadyRule(Rule):
             data.get('DHLM_Trip_Signal') and
             data.get('E_Stop')  # E_Stop TRUE = not pressed
         )
+        # Only transition to READY from ERROR or uninitialized state, don't override MOVING states
+        current_mode = state.get('OPERATION_MODE')
+        return safety_ok and (current_mode == 'ERROR' or current_mode is None)
 
     def action(self, controller, state):
-        """Set READY state."""
-
-        if not state.get('READY', False):
-            state['READY'] = True
-            controller.log_manager.info("System is READY")
-            controller.procon.set('output', 'MOTOR_2', False)
-            controller.procon.set('output', 'MOTOR_3', False)
-            controller.log_manager.info("READY: Motors OFF ")
-            state.pop('TIMER_1_START', None)
-            state.pop('TIMER_2_START', None)
+        """Set OPERATION_MODE to READY state."""
+        state['OPERATION_MODE'] = 'READY'
+        controller.log_manager.info("System is READY")
+        controller.procon.set('output', 'MOTOR_2', False)
+        controller.procon.set('output', 'MOTOR_3', False)
+        controller.log_manager.info("READY: Motors OFF ")
 
 
 class ClearReadyRule(Rule):
@@ -109,8 +107,8 @@ class ClearReadyRule(Rule):
         super().__init__("Clear Ready State")
 
     def condition(self, data, state):
-        """Check if READY should be cleared."""
-        ready_conditions = (
+        """Check if OPERATION_MODE should be set to ERROR - overrides any state."""
+        safety_violated = (
             not data.get('Auto_Select') or
             state.get('COMMS_FAILED') or
             state.get('E_STOP_TRIGGERED') or
@@ -119,188 +117,168 @@ class ClearReadyRule(Rule):
             not data.get('DHLM_Trip_Signal') or
             not data.get('E_Stop')
         )
-        return state.get('READY') and ready_conditions
+        return safety_violated and state.get('OPERATION_MODE') != 'ERROR'
 
     def action(self, controller, state):
-        """Clear READY state and stop motors."""
-        state['READY'] = False
+        """Set OPERATION_MODE to ERROR and stop motors."""
+        state['OPERATION_MODE'] = 'ERROR'
         controller.procon.set('output', 'MOTOR_2', False)
         controller.procon.set('output', 'MOTOR_3', False)
-        controller.log_manager.warning("System no longer READY - motors would stop")
+        controller.log_manager.warning("Safety violated - OPERATION_MODE set to ERROR")
 
 
-class StartConveyor2Rule(Rule):
-    """Start Conveyor 2 when button pressed and conditions met."""
+class InitiateMoveC3toC2(Rule):
+    """Start C3→C2 move: single bin from C3 to C2 after 30s delay."""
 
     def __init__(self):
-        super().__init__("Start Conveyor 2")
+        super().__init__("Initiate Move C3→C2")
 
     def condition(self, data, state):
-        """Check if we can start Conveyor 2."""
+        """Check if C3→C2 move should start."""
         return (
-            state.get('READY') and
-            data.get('PALM_Run_Signal') and
-            not data.get('S2') and
-            data.get('Klaar_Geweeg_Btn')  # Momentary button
+            state.get('OPERATION_MODE') == 'READY' and
+            data.get('S1') and  # Bin present on C3
+            not data.get('S2')  # No bin on C2
         )
 
     def action(self, controller, state):
-        """Start Conveyor 2."""
-        controller.procon.set('output', 'MOTOR_2', True)
-        state['CONVEYOR_2_RUN'] = True
-        controller.log_manager.info("Conveyor 2 START triggered (motor action commented out)")
+        """Set state to MOVING_C3_TO_C2 and schedule motors to start in 30s."""
+        from threading import Timer
 
-class StopConveyor2Rule(Rule):
-    """Start Conveyor 2 when button pressed and conditions met."""
+        # Immediately transition to MOVING state
+        state['OPERATION_MODE'] = 'MOVING_C3_TO_C2'
+        controller.log_manager.info("Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
+
+        # Delayed motor start (30 seconds)
+        def start_motors():
+            # Check emergency conditions before starting
+            if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+                controller.procon.set('output', 'MOTOR_2', True)
+                controller.procon.set('output', 'MOTOR_3', True)
+                controller.log_manager.info("MOVING_C3_TO_C2: Motors started after 30s delay")
+
+        Timer(30.0, start_motors).start()
+
+
+class CompleteMoveC3toC2(Rule):
+    """Complete C3→C2 move when bin reaches C2."""
 
     def __init__(self):
-        super().__init__("Stop Conveyor 2")
+        super().__init__("Complete Move C3→C2")
 
     def condition(self, data, state):
-        """Check if we can stop Conveyor 2."""
+        """Check if C3→C2 move is complete."""
         return (
-            state.get('CONVEYOR_2_RUN') and
-            data.get('S2')
+            state.get('OPERATION_MODE') == 'MOVING_C3_TO_C2' and
+            data.get('S2')  # Bin detected on C2
         )
 
     def action(self, controller, state):
-        """Start Conveyor 2."""
+        """Stop both motors and return to READY."""
         controller.procon.set('output', 'MOTOR_2', False)
-        state['CONVEYOR_2_RUN'] = False
-        controller.log_manager.info("Conveyor 2 STOP triggered")
-
-class Timer1StartRule(Rule):
-    """Start 30-second timer when READY and S1 is FALSE."""
-
-    def __init__(self):
-        super().__init__("Timer 1 Start")
-
-    def condition(self, data, state):
-        """Check if timer should start."""
-        return (
-            state.get('READY') and
-            not data.get('S1') and
-            'TIMER_1_START' not in state
-        )
-
-    def action(self, controller, state):
-        """Start timer."""
-        state['TIMER_1_START'] = time.time()
-        controller.log_manager.info("Timer 1 started (30 seconds)")
-
-
-class Conveyor3StartWithTimerRule(Rule):
-    """Start Conveyor 3 when Conveyor 2 running and S2 active after timer."""
-
-    def __init__(self):
-        super().__init__("Start Conveyor 3 with Timer")
-
-    def condition(self, data, state):
-        """Check if Conveyor 3 should start."""
-        timer_started = state.get('TIMER_1_START', 0)
-        timer_elapsed = timer_started > 0 and (time.time() - timer_started) >= 30
-
-        return (
-            state.get('READY') and
-            state.get('CONVEYOR_2_RUN') and
-            data.get('S2') and
-            timer_elapsed
-        )
-
-    def action(self, controller, state):
-        """Start Conveyor 3."""
-        controller.procon.set('output', 'MOTOR_3', True)
-        state['CONVEYOR_3_RUN'] = True
-        controller.log_manager.info("Conveyor 3 START triggered (motor action commented out)")
-
-
-class StartConveyor3Timer(Rule):
-    """Stop both conveyors when S2 becomes FALSE."""
-
-    def __init__(self):
-        super().__init__("Stop Conveyors on S2 False")
-
-    def condition(self, data, state):
-        """Check if conveyors should stop."""
-        return (
-             data.get('S1') and
-             state.get('CONVEYOR_3_RUN')
-        )
-
-    def action(self, controller, state):
-        state['TIMER_2_START'] = time.time()
-        controller.log_manager.info("Timer 2 started (2 seconds)")
-
-class StopConveyor3After2seconds(Rule):
-    """Stop Conveyor 3 2 seconds after Sensor 1 TRUE"""
-
-    def __init__(self):
-        super().__init__("Start Conveyor 3 with Timer")
-
-    def condition(self, data, state):
-        """Check if Conveyor 3 should start."""
-        timer_started = state.get('TIMER_2_START', 0)
-        timer_elapsed = timer_started > 0 and (time.time() - timer_started) >= 2
-
-        return (
-            timer_elapsed
-        )
-
-    def action(self, controller, state):
-        """Start Conveyor 3."""
         controller.procon.set('output', 'MOTOR_3', False)
-        state['CONVEYOR_3_RUN'] = False
-        state.pop('TIMER_2_START', None)
-        controller.log_manager.info("Conveyor 3 STOP triggered after timer")
+        state['OPERATION_MODE'] = 'READY'
+        controller.log_manager.info("Completed MOVING_C3_TO_C2 - both motors stopped, returning to READY")
 
 
-class MoveBinFrom3to2(Rule):
-    """Start Conveyor 3 when Conveyor 2 running and S2 active after timer."""
+class InitiateMoveC2toPalm(Rule):
+    """Start C2→PALM move: single bin from C2 to PALM."""
 
     def __init__(self):
-        super().__init__("Start Conveyor 3 with Timer")
+        super().__init__("Initiate Move C2→PALM")
 
     def condition(self, data, state):
-        """Check if Conveyor 3 should start."""
-        timer_started = state.get('TIMER_1_START', 0)
-        timer_elapsed = timer_started > 0 and (time.time() - timer_started) >= 30
-
+        """Check if C2→PALM move should start."""
         return (
-            state.get('READY') and
-            data.get('S2') and
-            timer_elapsed
+            state.get('OPERATION_MODE') == 'READY' and
+            not data.get('S1') and  # No bin on C3
+            data.get('S2') and  # Bin present on C2
+            data.get('Klaar_Geweeg_Btn') and  # Button pressed
+            data.get('PALM_Run_Signal')  # PALM ready
         )
 
     def action(self, controller, state):
-        """Start Conveyor 3."""
-        controller.procon.set('output', 'MOTOR_2', True)
-        controller.procon.set('output', 'MOTOR_3', True)
-        state['CONVEYOR_3_RUN'] = True
-        state['CONVEYOR_2_RUN'] = True
-        state['CONVEYOR_2_AND_RUN'] = True
-        state.pop('TIMER_1_START', None)
-        controller.log_manager.info("Conveyor 3 and 2 START triggered")
+        """Start MOTOR_2 and set state to MOVING_C2_TO_PALM."""
+        if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+            controller.procon.set('output', 'MOTOR_2', True)
+            state['OPERATION_MODE'] = 'MOVING_C2_TO_PALM'
+            controller.log_manager.info("Started MOVING_C2_TO_PALM - MOTOR_2 running")
 
 
-class Conveyor3DependencyRule(Rule):
-    """Safety rule: Conveyor 3 cannot run if Conveyor 2 is not running."""
+class CompleteMoveC2toPalm(Rule):
+    """Complete C2→PALM move when bin leaves C2."""
 
     def __init__(self):
-        super().__init__("Conveyor 3 Dependency Check")
+        super().__init__("Complete Move C2→PALM")
 
     def condition(self, data, state):
-        """Check if Conveyor 3 is running without Conveyor 2."""
+        """Check if C2→PALM move is complete."""
         return (
-            state.get('CONVEYOR_3_RUN', False) and
-            not state.get('CONVEYOR_2_RUN', False)
+            state.get('OPERATION_MODE') == 'MOVING_C2_TO_PALM' and
+            not data.get('S2')  # Bin left C2
         )
 
     def action(self, controller, state):
-        """Stop Conveyor 3 if Conveyor 2 is not running."""
-        # Comment out actual motor stop
-        # controller.procon.set('output', 'MOTOR_3', False)
-        state['CONVEYOR_3_RUN'] = False
-        controller.log_manager.warning("SAFETY: Conveyor 3 cannot run without Conveyor 2 (motor action commented out)")
+        """Stop MOTOR_2 and return to READY."""
+        controller.procon.set('output', 'MOTOR_2', False)
+        state['OPERATION_MODE'] = 'READY'
+        controller.log_manager.info("Completed MOVING_C2_TO_PALM - MOTOR_2 stopped, returning to READY")
+
+
+class InitiateMoveBoth(Rule):
+    """Start moving both bins simultaneously."""
+
+    def __init__(self):
+        super().__init__("Initiate Move Both")
+
+    def condition(self, data, state):
+        """Check if both bins move should start."""
+        return (
+            state.get('OPERATION_MODE') == 'READY' and
+            data.get('S1') and  # Bin present on C3
+            data.get('S2') and  # Bin present on C2
+            data.get('Klaar_Geweeg_Btn') and  # Button pressed
+            data.get('PALM_Run_Signal')  # PALM ready
+        )
+
+    def action(self, controller, state):
+        """Start both motors and set state to MOVING_BOTH."""
+        if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+            controller.procon.set('output', 'MOTOR_2', True)
+            controller.procon.set('output', 'MOTOR_3', True)
+            state['OPERATION_MODE'] = 'MOVING_BOTH'
+            controller.log_manager.info("Started MOVING_BOTH - both motors running")
+
+
+class CompleteMoveBoth(Rule):
+    """Complete moving both bins with delayed MOTOR_2 stop."""
+
+    def __init__(self):
+        super().__init__("Complete Move Both")
+
+    def condition(self, data, state):
+        """Check if both bins move is complete."""
+        return (
+            state.get('OPERATION_MODE') == 'MOVING_BOTH' and
+            not data.get('S2')  # Bin left C2
+        )
+
+    def action(self, controller, state):
+        """Stop MOTOR_3 immediately, delay MOTOR_2 stop by 2s."""
+        from threading import Timer
+
+        # Stop MOTOR_3 immediately
+        controller.procon.set('output', 'MOTOR_3', False)
+
+        # Delayed stop for MOTOR_2 (2 seconds)
+        def stop_motor_2():
+            controller.procon.set('output', 'MOTOR_2', False)
+            controller.log_manager.info("MOTOR_2 stopped after 2s delay")
+
+        Timer(2.0, stop_motor_2).start()
+
+        state['OPERATION_MODE'] = 'READY'
+        controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3 stopped, MOTOR_2 will stop in 2s, returning to READY")
 
 
 class EmergencyStopRule(Rule):
@@ -314,11 +292,12 @@ class EmergencyStopRule(Rule):
         return not data.get('E_Stop')
 
     def action(self, controller, state):
-        """Stop all motors and set E_STOP latch."""
+        """Stop all motors and set OPERATION_MODE to ERROR."""
         controller.emergency_stop_all_motors()
         # Clear all state except the E_STOP_TRIGGERED latch
         state.clear()
         state['E_STOP_TRIGGERED'] = True
+        state['OPERATION_MODE'] = 'ERROR'
         controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
 
 
@@ -348,10 +327,9 @@ def setup_rules(rule_engine):
 
     LADDER LOGIC ORDER (like PLC rungs):
     1. Comms monitoring and reset logic
-    2. System ready checks and state management
-    3. Normal operation (conveyor control, timers)
-    4. Safety interlocks (dependencies between outputs)
-    5. EMERGENCY OVERRIDES (E-Stop, comms failure) - ALWAYS LAST
+    2. System ready checks and OPERATION_MODE management
+    3. Normal operation (state machine transitions)
+    4. EMERGENCY OVERRIDES (E-Stop, comms failure) - ALWAYS LAST
 
     Args:
         rule_engine: RuleEngine instance
@@ -361,22 +339,23 @@ def setup_rules(rule_engine):
     rule_engine.add_rule(CommsResetRule())             # Allow reset after comms failure
 
     # ===== SECTION 2: System Ready State Management =====
-    rule_engine.add_rule(ReadyRule())                  # Set READY when conditions met
-    rule_engine.add_rule(ClearReadyRule())             # Clear READY when conditions lost
+    rule_engine.add_rule(ReadyRule())                  # Set OPERATION_MODE='READY' when conditions met
+    rule_engine.add_rule(ClearReadyRule())             # Set OPERATION_MODE='ERROR' when conditions lost
 
-    # ===== SECTION 3: Normal Operation (Conveyor Control) =====
-    rule_engine.add_rule(StartConveyor2Rule())         # Start Conveyor 2 on button press
-    rule_engine.add_rule(StopConveyor2Rule())
-    rule_engine.add_rule(Timer1StartRule())            # Start 30-second timer
-    rule_engine.add_rule(Conveyor3StartWithTimerRule()) # Start Conveyor 3 after timer
-    rule_engine.add_rule(StartConveyor3Timer()) # Stop conveyors when S2 false
-    rule_engine.add_rule(StopConveyor3After2seconds())
-    rule_engine.add_rule(MoveBinFrom3to2())
+    # ===== SECTION 3: State Machine Operations =====
+    # C3→C2 operation (single bin from C3 to C2)
+    rule_engine.add_rule(InitiateMoveC3toC2())         # Start C3→C2 move with 30s delay
+    rule_engine.add_rule(CompleteMoveC3toC2())         # Complete when S2 becomes true
 
-    # ===== SECTION 4: Safety Interlocks =====
-    rule_engine.add_rule(Conveyor3DependencyRule())    # Conveyor 3 requires Conveyor 2
+    # C2→PALM operation (single bin from C2 to PALM)
+    rule_engine.add_rule(InitiateMoveC2toPalm())       # Start C2→PALM move on button
+    rule_engine.add_rule(CompleteMoveC2toPalm())       # Complete when S2 becomes false
 
-    # ===== SECTION 5: EMERGENCY OVERRIDES (ALWAYS EXECUTE LAST) =====
+    # Both bins operation (C3→C2 and C2→PALM simultaneously)
+    rule_engine.add_rule(InitiateMoveBoth())           # Start both bins move on button
+    rule_engine.add_rule(CompleteMoveBoth())           # Complete with 2s delay for MOTOR_2
+
+    # ===== SECTION 4: EMERGENCY OVERRIDES (ALWAYS EXECUTE LAST) =====
     # These rules execute last and can override all previous rules
-    rule_engine.add_rule(EmergencyStopRule())          # E-Stop stops everything
+    rule_engine.add_rule(EmergencyStopRule())          # E-Stop stops everything, sets OPERATION_MODE='ERROR'
     rule_engine.add_rule(EmergencyStopResetRule())     # Allow reset after emergency

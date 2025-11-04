@@ -40,10 +40,15 @@ class MockModbusClient(ModbusInterface):
         self.inputs = {}
         for address, info in MODBUS_MAP['INPUT']['coils'].items():
             # Convert 0-indexed address to 1-indexed for inputs dict
+            # Default to False, but set trip signals and E_Stop to True (normally closed = safe state)
+            default_state = False
+            if info['label'] in ['M1_Trip', 'M2_Trip', 'E_Stop', 'DHLM_Trip_Signal']:
+                default_state = True
+
             self.inputs[address + 1] = {
                 'label': info['label'],
                 'description': info['description'],
-                'state': False
+                'state': default_state
             }
 
         # In-memory storage for mock data
