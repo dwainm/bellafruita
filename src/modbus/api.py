@@ -1,7 +1,7 @@
 """High-level API for Procon Modbus operations using labels instead of addresses."""
 
 from typing import Any, Union
-from .mapping import get_address, get_info
+from io_mapping import get_address, get_info
 from .interface import ModbusInterface
 
 
@@ -163,7 +163,7 @@ class Procon:
         result = {}
 
         # Get all defined addresses for this device/type
-        from .mapping import get_all_labels
+        from io_mapping import get_all_labels
         labels = get_all_labels(device, reg_type)
 
         if not labels:
