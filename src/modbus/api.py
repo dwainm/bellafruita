@@ -122,15 +122,17 @@ class Procon:
                 # Write single coil
                 if not isinstance(value, bool):
                     return False
-                client.write_coil(address, value, device_id=slave_id)
-                return True
-
+                result = client.write_coil(address, value, device_id=slave_id)
+                # Check if write was successful (result should not be None)
+                return result is not None
+            
             elif reg_type == 'registers':
                 # Write single register
                 if not isinstance(value, int):
                     return False
-                client.write_register(address, value, device_id=slave_id)
-                return True
+                result = client.write_register(address, value, device_id=slave_id)
+                # Check if write was successful (result should not be None)
+                return result is not None
 
         except Exception:
             return False
@@ -189,8 +191,15 @@ class Procon:
                         idx = addr - min_addr
                         if idx < len(read_result.registers):
                             result[label] = read_result.registers[idx]
+                else:
+                    # Connection failed - explicitly set registers to 0
+                    for addr, label, _ in labels:
+                        result[label] = 0
 
         except Exception:
-            pass
+            # On exception, explicitly set all registers to 0 for clarity
+            if reg_type == 'registers':
+                for addr, label, _ in labels:
+                    result[label] = 0
 
         return result
