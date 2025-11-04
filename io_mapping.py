@@ -19,8 +19,6 @@ MODBUS_MAP = {
             9: {'label': 'Auto_Select', 'description': 'Selector Switch Auto'},
             10: {'label': 'Klaar_Geweeg_Btn', 'description': 'Klaar Geweeg Button (Ready Weighed)'},
             11: {'label': 'Reset_Btn', 'description': 'System Reset Button'},
-            12: {'label': 'M1_TC', 'description': 'Conveyor 1 Motor Thermal Contact'},
-            13: {'label': 'M2_TC', 'description': 'Conveyor 2 Motor Thermal Contact'},
             14: {'label': 'PALM_Run_Signal', 'description': 'PALM Chemtrack Run Signal'},
             15: {'label': 'DHLM_Trip_Signal', 'description': 'DHLM Chemtrack Trip Signal'},
         },
