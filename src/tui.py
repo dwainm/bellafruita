@@ -166,6 +166,8 @@ class CommsStatusWidget(Static):
 
         self._initialized = True
         if dead:
+            # Reset heartbeat indicators when comms are dead
+            self.reset_pulses()
             # Comms dead - show warning
             self._status_text.update("[bold red on yellow] ⚠️  COMMUNICATIONS FAILED - MOTORS STOPPED [/bold red on yellow]")
             self._retry_button.display = True
@@ -700,11 +702,9 @@ class ModbusTUI(App):
         """Poll Modbus devices, log data, and update display."""
         # Read and log all inputs
         input_data = self.controller.read_and_log_all_inputs()
-        self.comms_status_widget.pulse_input()
 
         # Read and log all outputs
         output_data = self.controller.read_and_log_all_outputs()
-        self.comms_status_widget.pulse_output()
 
         # Evaluate rules if rule engine is present
         if self.rule_engine:
@@ -718,7 +718,13 @@ class ModbusTUI(App):
         else:
             # Fallback: no rule engine, use controller's comms_dead flag
             self.controller.check_and_handle_comms_failure()
-            self.comms_status_widget.set_status(self.controller.comms_dead)
+            comms_failed = self.controller.comms_dead
+            self.comms_status_widget.set_status(comms_failed)
+
+        # Only pulse heartbeat indicators if comms are healthy
+        if not comms_failed:
+            self.comms_status_widget.pulse_input()
+            self.comms_status_widget.pulse_output()
 
         # Update input widget states
         if hasattr(self.controller.input_client, 'inputs'):
