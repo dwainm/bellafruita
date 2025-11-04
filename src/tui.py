@@ -197,8 +197,8 @@ class EventLogWidget(Static):
         """
         lines = []
 
-        # Show recent events (newest last)
-        for event in events[-count:]:
+        # Show recent events (newest first)
+        for event in reversed(events[-count:]):
             timestamp = event.get_formatted_time()
 
             # Color code by severity level
@@ -568,17 +568,17 @@ class ModbusTUI(App):
                     self.active_rules_widget = ActiveRulesWidget()
                     yield self.active_rules_widget
 
-            # Register history section
-            with ScrollableContainer(id="log-container"):
-                yield Static("Register History", classes="section-title")
-                self.log_widget = LogDisplayWidget()
-                yield self.log_widget
-
-            # System log section (at bottom)
+            # System log section
             with ScrollableContainer(id="event-log-container"):
                 yield Static("System Log", classes="section-title")
                 self.event_widget = EventLogWidget()
                 yield self.event_widget
+
+            # Register history section (at bottom)
+            with ScrollableContainer(id="log-container"):
+                yield Static("Register History", classes="section-title")
+                self.log_widget = LogDisplayWidget()
+                yield self.log_widget
 
         yield Footer()
 
@@ -770,6 +770,13 @@ class ModbusTUI(App):
         # Update event log
         events = self.controller.log_manager.get_recent_events(count=1000)
         self.event_widget.update_events(events, count=1000)
+
+        # Auto-scroll to top to show newest events
+        try:
+            event_container = self.query_one("#event-log-container", ScrollableContainer)
+            event_container.scroll_home(animate=False)
+        except Exception:
+            pass  # Container not ready yet
 
         # Update active rules display from shared state (thread-safe)
         if self.active_rules_widget and self.shared_state:
