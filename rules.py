@@ -414,8 +414,7 @@ class CompleteMoveBoth(Rule):
         )
 
     def action(self, controller, state):
-        """Stop MOTOR_3 immediately, delay MOTOR_2 stop by 2s."""
-        # Stop MOTOR_3 immediately
+        """Stop MOTOR 2 and 3 immediately."""
         controller.procon.set('output', 'MOTOR_3', False)
         controller.procon.set('output', 'MOTOR_2', False)
         state['OPERATION_MODE'] = 'READY'
