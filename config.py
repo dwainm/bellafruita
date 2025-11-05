@@ -12,7 +12,7 @@ class ModbusConfig:
     output_ip: str = "172.20.231.41" # boet
     input_slave_id: int = 1
     output_slave_id: int = 1
-    timeout: float = 0.5  # Network timeout in seconds (faster detection of failures)
+    timeout: float = 10.0  # Network timeout in seconds (Modbus operation timeout)
     retries: int = 0  # Number of retry attempts per operation (0 = fail fast)
 
 
@@ -21,8 +21,8 @@ class SystemConfig:
     """Core system timing and monitoring settings."""
     poll_interval: float = 0.1
     log_stack_size: int = 3000
-    comms_timeout: float = 2.0  # Comms failure detection time (reduced for faster response)
-    edge_detection_window_ms: float = 500.0  # Time window for detecting button presses and signal edges (milliseconds)
+    comms_timeout: float = 5.0  # Comms failure detection time (how long VERSION=0 before declaring comms failed)
+    edge_detection_window_ms: float = 15000.0  # Time window for detecting button presses and signal edges (milliseconds)
 
 
 @dataclass
