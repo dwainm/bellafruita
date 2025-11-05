@@ -85,8 +85,6 @@ class PollingThread(threading.Thread):
         self.state = state
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
-        self.last_comms_retry_time = 0
-        self.retry_count = 0  # Track number of retry attempts
 
     def stop(self) -> None:
         """Signal the thread to stop."""
@@ -105,36 +103,10 @@ class PollingThread(threading.Thread):
                 with self.state.lock:
                     comms_failed = self.state.comms_failed
 
-                # Reset retry counter if comms are healthy
-                if not comms_failed and self.retry_count > 0:
-                    self.retry_count = 0
-
                 if comms_failed:
-                    current_time = time.time()
-                    retry_interval = self.controller.config.system.auto_retry_interval
-                    auto_retry_enabled = self.controller.config.system.auto_retry_enabled
-
-                    if current_time - self.last_comms_retry_time >= retry_interval and auto_retry_enabled:
-                        # Time for automatic retry attempt
-                        self.last_comms_retry_time = current_time
-                        self.retry_count += 1
-
-                        self.controller.log_manager.info(f"Auto-retry attempt #{self.retry_count}...")
-
-                        # Attempt reconnection
-                        if self.controller.retry_connection():
-                            # Success! Clear COMMS_FAILED
-                            if self.rule_engine:
-                                self.rule_engine.set_state('COMMS_FAILED', False)
-                                self.controller.log_manager.info(f"Auto-retry successful after {self.retry_count} attempts")
-                                self.retry_count = 0  # Reset counter
-                            should_read = True
-                        else:
-                            # Failed, skip this cycle
-                            should_read = False
-                    else:
-                        # Too soon or auto-retry disabled, skip this read
-                        should_read = False
+                    # Communications have failed - SKIP all reads until operator acknowledges
+                    # Operator must cycle the auto_start switch (off then on) to reset COMMS_FAILED
+                    should_read = False
 
                 # Perform blocking I/O (outside the lock!)
                 if should_read:

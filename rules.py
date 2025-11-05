@@ -54,28 +54,47 @@ class CommsHealthCheckRule(Rule):
 
 
 class CommsResetRule(Rule):
-    """Reset COMMS_FAILED latch when reset button pressed."""
+    """Reset COMMS_FAILED latch when operator acknowledges by cycling auto_start switch.
+
+    Operator must:
+    1. Turn auto_start switch OFF (this sets COMMS_ACKNOWLEDGED flag)
+    2. Turn auto_start switch back ON (this clears COMMS_FAILED if comms are healthy)
+
+    This ensures the operator has acknowledged the communication failure.
+    """
 
     def __init__(self):
         super().__init__("Comms Reset")
 
     def condition(self, data, state):
-        # Check if reset triggered (Auto_Select switched to manual) and comms currently failed
-        return (
-            state.get('COMMS_FAILED', False) and
-            data.falling_edge('Auto_Select')  # Detect switch to manual (reset position)
-        )
+        # Two-step process:
+        # Step 1: Detect switch turned OFF - this acknowledges the failure
+        if state.get('COMMS_FAILED', False) and data.falling_edge('Auto_Select'):
+            return True
+
+        # Step 2: Detect switch turned back ON after acknowledgment
+        if state.get('COMMS_ACKNOWLEDGED', False) and data.rising_edge('Auto_Select'):
+            return True
+
+        return False
 
     def action(self, controller, state):
-        """Clear COMMS_FAILED if comms are now healthy."""
-        # Verify comms are actually healthy before allowing reset
-        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+        """Two-step reset process."""
+        # Step 1: Operator turned switch OFF - acknowledge the failure
+        if state.get('COMMS_FAILED', False) and not state.get('COMMS_ACKNOWLEDGED', False):
+            state['COMMS_ACKNOWLEDGED'] = True
+            controller.log_manager.info("Comms failure ACKNOWLEDGED - turn auto_start switch back ON to reset")
 
-        if comms_healthy:
-            state['COMMS_FAILED'] = False
-            controller.log_manager.info("Communications RESET - system can now restart")
-        else:
-            controller.log_manager.warning("Reset attempted but communications still unhealthy")
+        # Step 2: Operator turned switch back ON - clear COMMS_FAILED if comms are healthy
+        elif state.get('COMMS_ACKNOWLEDGED', False):
+            comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+
+            if comms_healthy:
+                state['COMMS_FAILED'] = False
+                state['COMMS_ACKNOWLEDGED'] = False
+                controller.log_manager.info("Communications RESET - operator acknowledged, system can now restart")
+            else:
+                controller.log_manager.warning("Reset attempted but communications still unhealthy - cannot reset")
 
 
 class ReadyRule(Rule):
