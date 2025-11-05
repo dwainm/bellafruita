@@ -137,8 +137,8 @@ class InitiateMoveC3toC2(Rule):
         """Check if C3→C2 move should start."""
         return (
             state.get('OPERATION_MODE') == 'READY' and
-            data.get('S1') and  # Bin present on C3
             not data.get('S2')  # No bin on C2
+            data.get('S1') and  # Bin present on C3
         )
 
     def action(self, controller, state):
@@ -170,7 +170,7 @@ class CompleteMoveC3toC2(Rule):
         """Check if C3→C2 move is complete."""
         return (
             state.get('OPERATION_MODE') == 'MOVING_C3_TO_C2' and
-            data.get('S2')  # Bin detected on C2
+            not data.get('S2')  # Bin detected on C2
         )
 
     def action(self, controller, state):
@@ -191,8 +191,8 @@ class InitiateMoveC2toPalm(Rule):
         """Check if C2→PALM move should start."""
         return (
             state.get('OPERATION_MODE') == 'READY' and
-            not data.get('S1') and  # No bin on C3
-            data.get('S2') and  # Bin present on C2
+            data.get('S1') and  # No bin on C3
+            not data.get('S2') and  # Bin present on C2
             data.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
             data.get('PALM_Run_Signal')  # PALM ready
         )
@@ -215,7 +215,7 @@ class CompleteMoveC2toPalm(Rule):
         """Check if C2→PALM move is complete."""
         return (
             state.get('OPERATION_MODE') == 'MOVING_C2_TO_PALM' and
-            not data.get('S2')  # Bin left C2
+            data.get('S2')  # Bin left C2
         )
 
     def action(self, controller, state):
@@ -235,8 +235,8 @@ class InitiateMoveBoth(Rule):
         """Check if both bins move should start."""
         return (
             state.get('OPERATION_MODE') == 'READY' and
-            data.get('S1') and  # Bin present on C3
-            data.get('S2') and  # Bin present on C2
+            not data.get('S1') and  # Bin present on C3
+            not data.get('S2') and  # Bin present on C2
             data.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
             data.get('PALM_Run_Signal')  # PALM ready
         )
@@ -260,7 +260,7 @@ class CompleteMoveBoth(Rule):
         """Check if both bins move is complete."""
         return (
             state.get('OPERATION_MODE') == 'MOVING_BOTH' and
-            not data.get('S2')  # Bin left C2
+            data.falling_edge('S2')  # Bin left C2
         )
 
     def action(self, controller, state):
