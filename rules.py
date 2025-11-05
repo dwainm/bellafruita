@@ -104,16 +104,27 @@ class ReadyRule(Rule):
         super().__init__("System Ready Check")
 
     def condition(self, data, state):
-        """Check if all conditions for READY are met and we're in ERROR state."""
-        safety_ok = (
+        """Check if all conditions for READY are met and we're in ERROR state.
+
+        Trip signals must be TRUE (OK) for 1+ seconds before allowing READY.
+        """
+        # Immediate checks
+        immediate_ok = (
             data.get('Auto_Select') and
-            not state.get('COMMS_FAILED') and  # Cannot be READY if comms failed
-            not state.get('E_STOP_TRIGGERED') and  # Cannot be READY until E_Stop reset
-            data.get('M1_Trip') and  # Trip signals are normally closed (FALSE = TRIPPED, TRUE = ok)
-            data.get('M2_Trip') and
-            data.get('DHLM_Trip_Signal') and
-            data.get('E_Stop')  # E_Stop True = not pressed
+            not state.get('COMMS_FAILED') and
+            not state.get('E_STOP_TRIGGERED') and
+            data.get('E_Stop')
         )
+
+        # Trip signals must be held TRUE (OK) for 1+ seconds
+        trips_stable = (
+            data.extended_hold('M1_Trip', True, 1.0) and
+            data.extended_hold('M2_Trip', True, 1.0) and
+            data.extended_hold('DHLM_Trip_Signal', True, 1.0)
+        )
+
+        safety_ok = immediate_ok and trips_stable
+
         # Only transition to READY from ERROR or uninitialized state, don't override MOVING states
         current_mode = state.get('OPERATION_MODE')
         return safety_ok and (current_mode == 'ERROR' or current_mode is None)
@@ -134,16 +145,28 @@ class ClearReadyRule(Rule):
         super().__init__("Clear Ready State")
 
     def condition(self, data, state):
-        """Check if OPERATION_MODE should be set to ERROR - overrides any state."""
-        safety_violated = (
+        """Check if OPERATION_MODE should be set to ERROR - overrides any state.
+
+        Uses extended_hold() for trip signals to debounce momentary glitches.
+        Trip signals must be FALSE for 1+ seconds before triggering error.
+        """
+        # Immediate failures (no debounce needed)
+        immediate_violations = (
             not data.get('Auto_Select') or
             state.get('COMMS_FAILED') or
             state.get('E_STOP_TRIGGERED') or
-            not data.get('M1_Trip') or
-            not data.get('M2_Trip') or
-            not data.get('DHLM_Trip_Signal') or
-            not data.get('E_Stop')
+            not data.get('E_Stop')  # E_Stop needs immediate response
         )
+
+        # Trip signals with 1-second debounce to filter out blips
+        # Only trigger if they've been FALSE (tripped) for 1+ seconds
+        trip_violations = (
+            data.extended_hold('M1_Trip', False, 1.0) or
+            data.extended_hold('M2_Trip', False, 1.0) or
+            data.extended_hold('DHLM_Trip_Signal', False, 1.0)
+        )
+
+        safety_violated = immediate_violations or trip_violations
         return safety_violated and state.get('OPERATION_MODE') != 'ERROR'
 
     def action(self, controller, state):

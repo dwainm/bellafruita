@@ -62,6 +62,59 @@ class EdgeDetectorDict(dict):
         window = window_ms if window_ms is not None else self.default_window_ms
         return self._detect_edge(signal, 'falling', window)
 
+    def extended_hold(self, signal: str, value: bool, hold_seconds: float = 1.0) -> bool:
+        """Check if signal has been held at a specific value for a duration.
+
+        This is useful for debouncing signals that might have brief glitches.
+        For example, checking if a trip signal has been FALSE for 1+ seconds
+        before triggering an emergency stop.
+
+        Args:
+            signal: Signal name to check (e.g., 'M1_Trip', 'E_Stop')
+            value: The value to check for (True or False)
+            hold_seconds: How long the signal must be held (in seconds)
+
+        Returns:
+            True if signal has been continuously at 'value' for 'hold_seconds'
+
+        Example:
+            # Check if M1_Trip has been FALSE (tripped) for 1+ seconds
+            if data.extended_hold('M1_Trip', False, 1.0):
+                # Genuine trip condition - take action
+        """
+        logs = self.log_manager.input_logs
+
+        if len(logs) < 2:
+            return False
+
+        # Calculate time window
+        current_time = time.time()
+        cutoff_time = current_time - hold_seconds
+
+        # Collect all values within the hold window
+        values_in_window = []
+        for entry in reversed(logs):
+            if entry.timestamp < cutoff_time:
+                break
+            values_in_window.append((entry.timestamp, entry.data.get(signal)))
+
+        # Need enough history to cover the hold period
+        if not values_in_window:
+            return False
+
+        # Check if we have data covering the entire hold period
+        oldest_timestamp = values_in_window[-1][0]
+        if oldest_timestamp > cutoff_time:
+            # Not enough history - can't confirm hold
+            return False
+
+        # Check that ALL values in the window match the desired value
+        for timestamp, signal_value in values_in_window:
+            if signal_value != value:
+                return False  # Found a different value - not held continuously
+
+        return True  # All values match - signal has been held
+
     def _detect_edge(self, signal: str, edge_type: str, window_ms: float) -> bool:
         """Internal method to detect edges in log history.
 
