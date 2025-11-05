@@ -21,6 +21,7 @@ Order matters - add safety rules LAST to ensure they can override normal operati
 
 from src.rule_engine import Rule
 from threading import Timer
+import time
 
 
 class CommsHealthCheckRule(Rule):
@@ -128,6 +129,38 @@ class ClearReadyRule(Rule):
         controller.procon.set('output', 'MOTOR_2', False)
         controller.procon.set('output', 'MOTOR_3', False)
         controller.log_manager.warning("Safety violated - OPERATION_MODE set to ERROR")
+
+class C3ReadyTimerStart(Rule):
+    """Set Creat Posittion LED on when crates aren't in he right place."""
+    def __init__(self):
+        super().__init__("Start Timer When S1 Is broken")
+
+    def condition(self, data, state):
+        """Check if all conditions for READY are met and we're in ERROR state."""
+        return(
+            not data.get('S1') and 
+            'C3_ReadyTimer' not in state
+        )
+
+    def action(self, controller, state):
+        state['C3_ReadyTimer'] = time.time()
+        controller.log_manager.info("C3ReadyTimer - Started")
+
+class C3ReadyTimerReset(Rule):
+    """Set Creat Posittion LED on when crates aren't in he right place."""
+    def __init__(self):
+        super().__init__("Start Timer When S1 Is broken")
+
+    def condition(self, data, state):
+        """Check if all conditions for READY are met and we're in ERROR state."""
+        return(
+            data.get('S1') and 
+            'C3_ReadyTimer' in state
+        )
+
+    def action(self, controller, state):
+        state.pop('C3_ReadyTimer', None)
+        controller.log_manager.info("C3ReadyTimer - Reset")
 
 class CratePositionsSensorLedOn(Rule):
     """Set Creat Posittion LED on when crates aren't in he right place."""
@@ -283,16 +316,33 @@ class InitiateMoveBoth(Rule):
         )
 
     def action(self, controller, state):
-        """Start both motors and set state to MOVING_BOTH."""
-        def start_motor_3():
-            controller.procon.set('output', 'MOTOR_3', True)
-            controller.log_manager.info_once("MOVING_BOTH: started motor 3 after 30 second delay. ")
-
+        """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
         if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
-            Timer(30.0, start_motor_3).start()
+            # Calculate how long bin has been on C3
+            c3_timer_start = state.get('C3_ReadyTimer', None)
+            if c3_timer_start:
+                elapsed = time.time() - c3_timer_start
+                # Ensure bin is on C3 for 30 seconds total
+                remaining_delay = max(0, 30.0 - elapsed)
+                log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s (bin on C3 for {elapsed:.1f}s)"
+            else:
+                # Fallback if timer not found (shouldn't happen)
+                elapsed = 0
+                remaining_delay = 30.0
+                controller.log_manager.warning("C3_ReadyTimer not found, using default 30s delay")
+                log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s"
+
+            # Start MOTOR_3 with calculated delay
+            def start_motor_3():
+                controller.procon.set('output', 'MOTOR_3', True)
+                controller.log_manager.info_once(f"MOVING_BOTH: started motor 3 after {remaining_delay:.1f}s delay")
+
+            Timer(remaining_delay, start_motor_3).start()
+
+            # Start MOTOR_2 immediately
             controller.procon.set('output', 'MOTOR_2', True)
             state['OPERATION_MODE'] = 'MOVING_BOTH'
-            controller.log_manager.info_once("Started MOVING_BOTH - Motor 2 started, Motor 3 will start in 30 seconds")
+            controller.log_manager.info_once(log_msg)
 
 
 class CompleteMoveBoth(Rule):
@@ -441,27 +491,31 @@ def setup_rules(rule_engine):
     Args:
         rule_engine: RuleEngine instance
     """
-    # ===== SECTION 0: Test/Debug Rules =====
+    # =====  Test/Debug Rules =====
     # Uncomment these to test edge detection
     # rule_engine.add_rule(TestKlaarGeweeButtonEdge())   # Test button edge detection
     # rule_engine.add_rule(TestAutoSelectEdge())         # Test auto select edge detection
     # rule_engine.add_rule(TestClearKlaarGeweeButton())  # Clear button test state
     # rule_engine.add_rule(TestClearAutoSelect())        # Clear auto select test state
 
-    # ===== SECTION 1: Communications Monitoring =====
+    # =====  Communications Monitoring =====
     rule_engine.add_rule(CommsHealthCheckRule())       # Monitor comms health continuously
     rule_engine.add_rule(CommsResetRule())             # Allow reset after comms failure
 
-    # ===== SECTION 2: System Ready State Management =====
+    # =====  System Ready State Management =====
     rule_engine.add_rule(ReadyRule())                  # Set OPERATION_MODE='READY' when conditions met
     rule_engine.add_rule(ClearReadyRule())             # Set OPERATION_MODE='ERROR' when conditions lost
 
-    # ===== SECTION 3: Creat Possitioning Rules=====
+    # =====  C3 Timer Rules=====
+    rule_engine.add_rule(C3ReadyTimerStart())
+    rule_engine.add_rule(C3ReadyTimerReset())
+
+    # =====  Creat Possitioning Rules=====
     # C3→C2 operation (single bin from C3 to C2)
     rule_engine.add_rule(CratePositionsSensorLedOn())
     rule_engine.add_rule(CratePositionsSensorLedOff())
 
-    # ===== SECTION 3: State Machine Operations =====
+    # =====  State Machine Operations =====
     # C3→C2 operation (single bin from C3 to C2)
     rule_engine.add_rule(InitiateMoveC3toC2())         # Start C3→C2 move with 30s delay
     rule_engine.add_rule(CompleteMoveC3toC2())         # Complete when S2 becomes true
@@ -474,7 +528,7 @@ def setup_rules(rule_engine):
     rule_engine.add_rule(InitiateMoveBoth())           # Start both bins move on button
     rule_engine.add_rule(CompleteMoveBoth())           # Complete with 2s delay for MOTOR_2
 
-    # ===== SECTION 4: EMERGENCY OVERRIDES (ALWAYS EXECUTE LAST) =====
+    # =====  EMERGENCY OVERRIDES (ALWAYS EXECUTE LAST) =====
     # These rules execute last and can override all previous rules
     rule_engine.add_rule(EmergencyStopRule())          # E-Stop stops everything, sets OPERATION_MODE='ERROR'
     rule_engine.add_rule(EmergencyStopResetRule())     # Allow reset after emergency
