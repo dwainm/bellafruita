@@ -693,6 +693,11 @@ class ModbusTUI(App):
             self.comms_status_widget.set_status(False)
             self.connected = True
 
+            # Clear the COMMS_FAILED state in rule engine
+            if self.rule_engine:
+                self.rule_engine.set_state('COMMS_FAILED', False)
+                self.controller.log_manager.info("Cleared COMMS_FAILED state - system can return to READY")
+
             # Update shared state
             if self.shared_state:
                 with self.shared_state.lock:

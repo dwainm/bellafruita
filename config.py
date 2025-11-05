@@ -22,6 +22,8 @@ class SystemConfig:
     poll_interval: float = 0.1
     log_stack_size: int = 3000
     comms_timeout: float = 5.0  # Comms failure detection time (how long VERSION=0 before declaring comms failed)
+    auto_retry_enabled: bool = True  # Enable automatic reconnection on comms failure
+    auto_retry_interval: float = 10.0  # Seconds between automatic retry attempts
     edge_detection_window_ms: float = 15000.0  # Time window for detecting button presses and signal edges (milliseconds)
 
 

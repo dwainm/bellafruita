@@ -386,7 +386,6 @@ class EmergencyStopRule(Rule):
         state['OPERATION_MODE'] = 'ERROR'
         controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
 
-
 class TestKlaarGeweeButtonEdge(Rule):
     """Test rule: Set state when Klaar_Geweeg button pressed."""
 
