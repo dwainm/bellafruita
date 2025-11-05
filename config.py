@@ -6,8 +6,10 @@ from dataclasses import dataclass
 @dataclass
 class ModbusConfig:
     """Modbus connection settings."""
-    input_ip: str = "172.20.231.25"
-    output_ip: str = "172.20.231.49"
+    # input_ip: str = "172.20.231.25"
+    # output_ip: str = "172.20.231.49"
+    input_ip: str = "172.20.231.125" # boet
+    output_ip: str = "172.20.231.41" # boet
     input_slave_id: int = 1
     output_slave_id: int = 1
     timeout: float = 0.5  # Network timeout in seconds (faster detection of failures)
