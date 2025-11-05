@@ -137,8 +137,8 @@ class InitiateMoveC3toC2(Rule):
         """Check if C3→C2 move should start."""
         return (
             state.get('OPERATION_MODE') == 'READY' and
-            not data.get('S2')  # No bin on C2
-            data.get('S1') and  # Bin present on C3
+            data.get('S2')  # No bin on C2
+            not data.get('S1') and  # Bin present on C3
         )
 
     def action(self, controller, state):
