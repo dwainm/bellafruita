@@ -125,10 +125,50 @@ class ClearReadyRule(Rule):
 
     def action(self, controller, state):
         """Set OPERATION_MODE to ERROR and stop motors."""
+        # Identify which specific safety conditions are violated
+        violations = []
+
+        # Get current data from controller
+        try:
+            auto_select = controller.procon.get('input', 'Auto_Select')
+            m1_trip = controller.procon.get('input', 'M1_Trip')
+            m2_trip = controller.procon.get('input', 'M2_Trip')
+            dhlm_trip = controller.procon.get('input', 'DHLM_Trip_Signal')
+            e_stop = controller.procon.get('input', 'E_Stop')
+        except:
+            # Fallback if procon.get fails
+            auto_select = True
+            m1_trip = True
+            m2_trip = True
+            dhlm_trip = True
+            e_stop = True
+
+        if not auto_select:
+            violations.append("Auto_Select=OFF (not in auto mode)")
+        if state.get('COMMS_FAILED'):
+            violations.append("COMMS_FAILED (communications lost)")
+        if state.get('E_STOP_TRIGGERED'):
+            violations.append("E_STOP_TRIGGERED (emergency stop active)")
+        if not m1_trip:
+            violations.append("M1_Trip=FALSE (Motor 1 tripped)")
+        if not m2_trip:
+            violations.append("M2_Trip=FALSE (Motor 2 tripped)")
+        if not dhlm_trip:
+            violations.append("DHLM_Trip_Signal=FALSE (DHLM tripped)")
+        if not e_stop:
+            violations.append("E_Stop=FALSE (emergency stop pressed)")
+
+        # Set error state and stop motors
         state['OPERATION_MODE'] = 'ERROR'
         controller.procon.set('output', 'MOTOR_2', False)
         controller.procon.set('output', 'MOTOR_3', False)
-        controller.log_manager.warning("Safety violated - OPERATION_MODE set to ERROR")
+
+        # Log specific violations
+        if violations:
+            violation_msg = ", ".join(violations)
+            controller.log_manager.warning(f"Safety violated - OPERATION_MODE set to ERROR: {violation_msg}")
+        else:
+            controller.log_manager.warning("Safety violated - OPERATION_MODE set to ERROR (reason unknown)")
 
 class C3ReadyTimerStart(Rule):
     """Set Creat Posittion LED on when crates aren't in he right place."""
