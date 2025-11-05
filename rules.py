@@ -279,19 +279,9 @@ class CompleteMoveBoth(Rule):
 
         # Stop MOTOR_3 immediately
         controller.procon.set('output', 'MOTOR_3', False)
-
-        # Delayed stop for MOTOR_2 (2 seconds)
-        def stop_motor_2():
-            controller.procon.set('output', 'MOTOR_2', False)
-            controller.log_manager.info_once("MOTOR_2 stopped after 2s delay")
-            # Clear the log_once cache for next cycle
-            controller.log_manager.clear_logged_once(message="Started MOVING_BOTH - both motors running")
-            controller.log_manager.clear_logged_once(message="Completed MOVING_BOTH - MOTOR_3 stopped, MOTOR_2 will stop in 2s, returning to READY")
-
-        Timer(2.0, stop_motor_2).start()
-
+        controller.procon.set('output', 'MOTOR_2', False)
         state['OPERATION_MODE'] = 'READY'
-        controller.log_manager.info_once("Completed MOVING_BOTH - MOTOR_3 stopped, MOTOR_2 will stop in 2s, returning to READY")
+        controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3, MOTOR_2, returning to READY")
 
 
 class EmergencyStopRule(Rule):
