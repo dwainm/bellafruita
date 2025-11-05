@@ -147,7 +147,7 @@ class InitiateMoveC3toC2(Rule):
 
         # Immediately transition to MOVING state
         state['OPERATION_MODE'] = 'MOVING_C3_TO_C2'
-        controller.log_manager.info("Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
+        controller.log_manager.info_once("Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
 
         # Delayed motor start (30 seconds)
         def start_motors():
@@ -155,7 +155,7 @@ class InitiateMoveC3toC2(Rule):
             if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
                 controller.procon.set('output', 'MOTOR_2', True)
                 controller.procon.set('output', 'MOTOR_3', True)
-                controller.log_manager.info("MOVING_C3_TO_C2: Motors started after 30s delay")
+                controller.log_manager.info_once("MOVING_C3_TO_C2: Motors started after 30s delay")
 
         Timer(30.0, start_motors).start()
 
@@ -179,6 +179,8 @@ class CompleteMoveC3toC2(Rule):
         controller.procon.set('output', 'MOTOR_3', False)
         state['OPERATION_MODE'] = 'READY'
         controller.log_manager.info("Completed MOVING_C3_TO_C2 - both motors stopped, returning to READY")
+        # Clear the log_once cache so we can log the next cycle
+        controller.log_manager.clear_logged_once(message="Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
 
 
 class InitiateMoveC2toPalm(Rule):
@@ -202,7 +204,7 @@ class InitiateMoveC2toPalm(Rule):
         if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
             controller.procon.set('output', 'MOTOR_2', True)
             state['OPERATION_MODE'] = 'MOVING_C2_TO_PALM'
-            controller.log_manager.info("Started MOVING_C2_TO_PALM - MOTOR_2 running")
+            controller.log_manager.info_once("Started MOVING_C2_TO_PALM - MOTOR_2 running")
 
 
 class CompleteMoveC2toPalm(Rule):
@@ -221,14 +223,17 @@ class CompleteMoveC2toPalm(Rule):
     def action(self, controller, state):
         """Stop MOTOR_2 and return to READY."""
         from threading import Timer
-        # Delayed stop for MOTOR_2 (2 seconds)
+        # Delayed stop for MOTOR_2 (1 second)
         def stop_motor_2():
             controller.procon.set('output', 'MOTOR_2', False)
-            controller.log_manager.info("MOTOR_2 stopped after 1s delay")
+            controller.log_manager.info_once("MOTOR_2 stopped after 1s delay")
             state['OPERATION_MODE'] = 'READY'
+            # Clear the log_once cache for next cycle
+            controller.log_manager.clear_logged_once(message="Started MOVING_C2_TO_PALM - MOTOR_2 running")
+            controller.log_manager.clear_logged_once(message="MOVING_C2_TO_PALM - MOTOR_2 will stop in 1 seconds.")
 
         Timer(1.0, stop_motor_2).start()
-        controller.log_manager.info("MOVING_C2_TO_PALM - MOTOR_2 will stop in 1 seconds.")
+        controller.log_manager.info_once("MOVING_C2_TO_PALM - MOTOR_2 will stop in 1 seconds.")
 
 class InitiateMoveBoth(Rule):
     """Start moving both bins simultaneously."""
@@ -252,7 +257,7 @@ class InitiateMoveBoth(Rule):
             controller.procon.set('output', 'MOTOR_2', True)
             controller.procon.set('output', 'MOTOR_3', True)
             state['OPERATION_MODE'] = 'MOVING_BOTH'
-            controller.log_manager.info("Started MOVING_BOTH - both motors running")
+            controller.log_manager.info_once("Started MOVING_BOTH - both motors running")
 
 
 class CompleteMoveBoth(Rule):
@@ -278,12 +283,15 @@ class CompleteMoveBoth(Rule):
         # Delayed stop for MOTOR_2 (2 seconds)
         def stop_motor_2():
             controller.procon.set('output', 'MOTOR_2', False)
-            controller.log_manager.info("MOTOR_2 stopped after 2s delay")
+            controller.log_manager.info_once("MOTOR_2 stopped after 2s delay")
+            # Clear the log_once cache for next cycle
+            controller.log_manager.clear_logged_once(message="Started MOVING_BOTH - both motors running")
+            controller.log_manager.clear_logged_once(message="Completed MOVING_BOTH - MOTOR_3 stopped, MOTOR_2 will stop in 2s, returning to READY")
 
         Timer(2.0, stop_motor_2).start()
 
         state['OPERATION_MODE'] = 'READY'
-        controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3 stopped, MOTOR_2 will stop in 2s, returning to READY")
+        controller.log_manager.info_once("Completed MOVING_BOTH - MOTOR_3 stopped, MOTOR_2 will stop in 2s, returning to READY")
 
 
 class EmergencyStopRule(Rule):

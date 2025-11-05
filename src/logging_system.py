@@ -45,6 +45,7 @@ class LogManager:
         self.input_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.output_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.event_logs: deque[EventEntry] = deque(maxlen=max_entries)
+        self._logged_once: set[str] = set()  # Track messages logged once
 
     def log_input(self, data: Dict[str, Any]) -> None:
         """Log input module read.
@@ -167,6 +168,64 @@ class LogManager:
     def critical(self, message: str) -> None:
         """Log a critical event."""
         self.log_event("CRITICAL", message)
+
+    def log_once(self, level: str, message: str) -> bool:
+        """Log a message only once, preventing duplicates.
+
+        Args:
+            level: Event level ("INFO", "WARNING", "ERROR", "CRITICAL")
+            message: Event message
+
+        Returns:
+            bool: True if message was logged, False if already logged before
+        """
+        message_key = f"{level}:{message}"
+        if message_key not in self._logged_once:
+            self._logged_once.add(message_key)
+            self.log_event(level, message)
+            return True
+        return False
+
+    def info_once(self, message: str) -> bool:
+        """Log an info event only once."""
+        return self.log_once("INFO", message)
+
+    def warning_once(self, message: str) -> bool:
+        """Log a warning event only once."""
+        return self.log_once("WARNING", message)
+
+    def error_once(self, message: str) -> bool:
+        """Log an error event only once."""
+        return self.log_once("ERROR", message)
+
+    def critical_once(self, message: str) -> bool:
+        """Log a critical event only once."""
+        return self.log_once("CRITICAL", message)
+
+    def clear_logged_once(self, message: str = None, level: str = None) -> None:
+        """Clear logged once cache to allow messages to be logged again.
+
+        Args:
+            message: Specific message to clear (if None, clears all)
+            level: Specific level to clear (if None, clears all levels)
+        """
+        if message is None and level is None:
+            # Clear all
+            self._logged_once.clear()
+        elif message and level:
+            # Clear specific message at specific level
+            message_key = f"{level}:{message}"
+            self._logged_once.discard(message_key)
+        elif message:
+            # Clear message at all levels
+            for lvl in ["INFO", "WARNING", "ERROR", "CRITICAL"]:
+                message_key = f"{lvl}:{message}"
+                self._logged_once.discard(message_key)
+        elif level:
+            # Clear all messages at specific level
+            to_remove = [key for key in self._logged_once if key.startswith(f"{level}:")]
+            for key in to_remove:
+                self._logged_once.discard(key)
 
     def get_recent_events(self, count: int = 50) -> List[EventEntry]:
         """Get most recent event logs.
