@@ -42,6 +42,8 @@ class CommsHealthCheckRule(Rule):
             # Comms have failed - latch the failure state
             state['COMMS_FAILED'] = True
             controller.log_manager.critical("Communications FAILED - VERSION=0 for 5+ seconds. Reset required!")
+            # Turn on comms green light
+            controller.procon.set('output', 'LED_GREEN', True)
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
 
