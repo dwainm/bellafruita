@@ -113,12 +113,19 @@ class PollingThread(threading.Thread):
                     input_data = self.controller.read_and_log_all_inputs()
                     output_data = self.controller.read_and_log_all_outputs()
                 else:
-                    # Skip reads during comms failure
-                    input_data = {}
+                    # During comms failure, still attempt to read inputs for operator acknowledgment
+                    # (Auto_Select switch cycling). Inputs and outputs are on separate PLCs,
+                    # so inputs might still be readable even if output PLC has failed.
+                    try:
+                        input_data = self.controller.read_and_log_all_inputs()
+                    except Exception as e:
+                        self.controller.log_manager.error(f"Failed to read inputs during comms failure: {e}")
+                        input_data = {}
                     output_data = {}
 
-                # Evaluate rules (also outside the lock)
-                if self.rule_engine and should_read:
+                # ALWAYS evaluate rules, even during comms failure
+                # This allows CommsResetRule to detect operator acknowledgment via Auto_Select switch
+                if self.rule_engine:
                     sensor_data = {**input_data, **output_data}
                     self.rule_engine.evaluate(sensor_data)
 

@@ -230,6 +230,7 @@ def main():
     mode = "MOCK" if config.use_mock else "LIVE"
     controller.log_manager.info(f"Starting in {mode} mode")
 
+
     # Create rule engine
     rule_engine = RuleEngine(controller)
 

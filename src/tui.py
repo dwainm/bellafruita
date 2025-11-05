@@ -2,7 +2,7 @@
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
-from textual.widgets import Header, Footer, Static, Switch, Input, Label, Button
+from textual.widgets import Header, Footer, Static, Switch, Input, Label
 from textual.reactive import reactive
 from textual import on
 
@@ -102,7 +102,7 @@ class ActiveRulesWidget(Static):
 
 
 class CommsStatusWidget(Static):
-    """Widget showing communication status, heartbeat indicators, and retry button."""
+    """Widget showing communication status and heartbeat indicators."""
 
     input_beat = reactive(False)
     output_beat = reactive(False)
@@ -111,7 +111,6 @@ class CommsStatusWidget(Static):
         super().__init__(**kwargs)
         self._initialized = False
         self._status_text = None
-        self._retry_button = None
         self._input_indicator = None
         self._output_indicator = None
 
@@ -120,8 +119,6 @@ class CommsStatusWidget(Static):
         with Horizontal(classes="comms-status-row"):
             # Status in the center
             yield Static("[dim]Waiting for connection attempt...[/dim]", id="comms_status_text", classes="comms-status-text")
-            # Retry button on the right
-            yield Button("Retry Connection", id="retry_button", variant="warning", classes="retry-button")
             # Heartbeat indicators on the right
             yield Label("INPUT:", classes="heartbeat-label")
             yield Label(HEARTBEAT_INACTIVE, id="input_indicator", classes="heartbeat-indicator")
@@ -131,10 +128,8 @@ class CommsStatusWidget(Static):
     def on_mount(self) -> None:
         """Called when widget is mounted."""
         self._status_text = self.query_one("#comms_status_text", Static)
-        self._retry_button = self.query_one("#retry_button", Button)
         self._input_indicator = self.query_one("#input_indicator", Label)
         self._output_indicator = self.query_one("#output_indicator", Label)
-        self._retry_button.display = False  # Hide retry button initially
 
     def watch_input_beat(self, value: bool) -> None:
         """Update input heartbeat indicator."""
@@ -161,20 +156,18 @@ class CommsStatusWidget(Static):
 
     def set_status(self, dead: bool) -> None:
         """Update comms status."""
-        if not self._status_text or not self._retry_button:
+        if not self._status_text:
             return
 
         self._initialized = True
         if dead:
             # Reset heartbeat indicators when comms are dead
             self.reset_pulses()
-            # Comms dead - show warning
-            self._status_text.update("[bold red on yellow] ⚠️  COMMUNICATIONS FAILED - MOTORS STOPPED [/bold red on yellow]")
-            self._retry_button.display = True
+            # Comms dead - show warning (operator must cycle Auto_Select switch to reset)
+            self._status_text.update("[bold red on yellow] ⚠️  COMMUNICATIONS FAILED - CYCLE AUTO_SELECT SWITCH TO RESET [/bold red on yellow]")
         else:
             # Comms OK - show connected
             self._status_text.update("[bold black on green] ✓ CONNECTED [/bold black on green]")
-            self._retry_button.display = False
 
 
 class EventLogWidget(Static):
@@ -332,6 +325,18 @@ class ModbusTUI(App):
         height: auto;
     }
 
+    #outputs-container {
+        margin-top: 1;
+        margin-bottom: 1;
+        border: solid $accent;
+        padding: 1;
+        height: auto;
+    }
+
+    .outputs-row {
+        height: auto;
+    }
+
     .section-title {
         text-style: bold;
         color: $accent;
@@ -401,9 +406,6 @@ class ModbusTUI(App):
         margin-left: 2;
     }
 
-    .retry-button {
-        margin-left: 2;
-    }
 
     .heartbeat-label {
         color: $text;
@@ -477,6 +479,7 @@ class ModbusTUI(App):
         self.editable = editable
         self.shared_state = shared_state  # Thread-safe shared state
         self.input_widgets = {}
+        self.output_widgets = {}
         self.register_input = None
         self.comms_status_widget = None
         self.event_widget = None
@@ -560,6 +563,29 @@ class ModbusTUI(App):
                                     id="register_0_display",
                                     classes="register-display-compact"
                                 )
+
+            # Output Coils section (read-only display)
+            with Container(id="outputs-container"):
+                yield Static("Output Coils (Read-Only)", classes="section-title")
+
+                with Horizontal(classes="outputs-row"):
+                    # Get all defined outputs from MODBUS_MAP (sorted by address)
+                    all_outputs = sorted(MODBUS_MAP['OUTPUT']['coils'].items())
+
+                    for address, map_info in all_outputs:
+                        output_number = address + 1  # Convert to 1-indexed for internal tracking
+                        label = map_info.get('label', f'Output {output_number}')
+                        description = map_info.get('description', '')
+
+                        widget = InputControl(
+                            input_number=output_number,
+                            label=label,
+                            description=description,
+                            editable=False  # Always read-only for outputs
+                        )
+                        # Store output widgets separately with 'O' prefix to distinguish from inputs
+                        self.output_widgets[output_number] = widget
+                        yield widget
 
             # Active rules section (if rule engine provided)
             if self.rule_engine:
@@ -680,36 +706,6 @@ class ModbusTUI(App):
             except ValueError:
                 pass
 
-    @on(Button.Pressed, "#retry_button")
-    def on_retry_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle retry connection button press."""
-        # Show reconnecting message
-        self.comms_status_widget.update("[bold cyan]Reconnecting to Modbus terminals...[/bold cyan]")
-
-        # Attempt to reconnect
-        if self.controller.retry_connection():
-            # Update status immediately
-            self.comms_status_widget.update("[bold green]✓ Reconnected successfully[/bold green]")
-            self.comms_status_widget.set_status(False)
-            self.connected = True
-
-            # Clear the COMMS_FAILED state in rule engine
-            if self.rule_engine:
-                self.rule_engine.set_state('COMMS_FAILED', False)
-                self.controller.log_manager.info("Cleared COMMS_FAILED state - system can return to READY")
-
-            # Update shared state
-            if self.shared_state:
-                with self.shared_state.lock:
-                    self.shared_state.connected = True
-
-            # Background polling thread will automatically resume polling
-            # No need to start intervals here - rendering continues automatically
-
-            # Hide connection status after 2 seconds
-            self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
-        else:
-            self.comms_status_widget.update("[bold red]✗ Reconnection failed - Check event log[/bold red]")
 
     def render_state(self) -> None:
         """Render UI from shared state - NEVER BLOCKS!
@@ -759,6 +755,16 @@ class ModbusTUI(App):
                 label = map_info.get('label', '')
                 if label:
                     widget.state = input_data.get(label, False)
+
+        # Update output widget states (always read-only)
+        for address, widget in self.output_widgets.items():
+            # Convert address (1-indexed) to 0-indexed for MODBUS_MAP lookup
+            map_address = address - 1
+            from io_mapping import MODBUS_MAP
+            map_info = MODBUS_MAP['OUTPUT']['coils'].get(map_address, {})
+            label = map_info.get('label', '')
+            if label:
+                widget.state = output_data.get(label, False)
 
         # Update register display
         self.holding_register_0 = output_data.get('VERSION', 0)
