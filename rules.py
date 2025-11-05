@@ -220,15 +220,15 @@ class CompleteMoveC2toPalm(Rule):
 
     def action(self, controller, state):
         """Stop MOTOR_2 and return to READY."""
-
+        from threading import Timer
         # Delayed stop for MOTOR_2 (2 seconds)
         def stop_motor_2():
             controller.procon.set('output', 'MOTOR_2', False)
-            controller.log_manager.info("MOTOR_2 stopped after 2s delay")
+            controller.log_manager.info("MOTOR_2 stopped after 1s delay")
             state['OPERATION_MODE'] = 'READY'
 
-        Timer(2.0, stop_motor_2).start()
-        controller.log_manager.info("MOVING_C2_TO_PALM - MOTOR_2 will stop in 2 seconds.")
+        Timer(1.0, stop_motor_2).start()
+        controller.log_manager.info("MOVING_C2_TO_PALM - MOTOR_2 will stop in 1 seconds.")
 
 class InitiateMoveBoth(Rule):
     """Start moving both bins simultaneously."""
