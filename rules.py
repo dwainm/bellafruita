@@ -256,11 +256,18 @@ class InitiateMoveC3toC2(Rule):
 
         # Delayed motor start (30 seconds)
         def start_motors():
-            # Check emergency conditions before starting
-            if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+            # Safety check: verify we're still in correct mode before starting motors
+            current_mode = state.get('OPERATION_MODE')
+            if current_mode == 'MOVING_C3_TO_C2' and not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+                # Safe to start motors
                 controller.procon.set('output', 'MOTOR_2', True)
                 controller.procon.set('output', 'MOTOR_3', True)
                 controller.log_manager.info_once("MOVING_C3_TO_C2: Motors started after 30s delay")
+            else:
+                # State changed during delay - ensure motors are OFF
+                controller.procon.set('output', 'MOTOR_2', False)
+                controller.procon.set('output', 'MOTOR_3', False)
+                controller.log_manager.warning(f"MOVING_C3_TO_C2 delayed start cancelled - system in {current_mode} mode (expected MOVING_C3_TO_C2)")
 
         Timer(30.0, start_motors).start()
 
@@ -374,8 +381,16 @@ class InitiateMoveBoth(Rule):
 
             # Start MOTOR_3 with calculated delay
             def start_motor_3():
-                controller.procon.set('output', 'MOTOR_3', True)
-                controller.log_manager.info_once(f"MOVING_BOTH: started motor 3 after {remaining_delay:.1f}s delay")
+                # Safety check: verify we're still in correct mode before starting motor
+                current_mode = state.get('OPERATION_MODE')
+                if current_mode == 'MOVING_BOTH' and not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+                    # Safe to start motor
+                    controller.procon.set('output', 'MOTOR_3', True)
+                    controller.log_manager.info_once(f"MOVING_BOTH: started motor 3 after {remaining_delay:.1f}s delay")
+                else:
+                    # State changed during delay - ensure motor is OFF
+                    controller.procon.set('output', 'MOTOR_3', False)
+                    controller.log_manager.warning(f"Motor 3 delayed start cancelled - system in {current_mode} mode (expected MOVING_BOTH)")
 
             Timer(remaining_delay, start_motor_3).start()
 
