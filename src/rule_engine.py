@@ -9,6 +9,7 @@ Rules can:
 
 import time
 from typing import Callable, Dict, Any, Optional
+from src.edge_detector import EdgeDetectorDict
 
 
 class Rule:
@@ -140,6 +141,14 @@ class RuleEngine:
         # Clear active rules list (NOT state - state persists!)
         self.active_rules.clear()
 
+        # Wrap sensor data with edge detection capabilities
+        edge_window_ms = self.controller.config.system.edge_detection_window_ms
+        data_with_edges = EdgeDetectorDict(
+            sensor_data,
+            self.controller.log_manager,
+            edge_window_ms
+        )
+
         # Execute ALL rules in order (like PLC ladder rungs)
         for rule in self.rules:
             if not rule.enabled:
@@ -147,7 +156,8 @@ class RuleEngine:
 
             try:
                 # Check if rule should trigger (like ladder contacts)
-                if rule.condition(sensor_data, self.state):
+                # Pass EdgeDetectorDict which supports both .get() and .rising_edge()/.falling_edge()
+                if rule.condition(data_with_edges, self.state):
                     self.active_rules.append(rule.name)
                     rule.last_triggered = time.time()
                     rule.trigger_count += 1

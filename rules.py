@@ -52,10 +52,10 @@ class CommsResetRule(Rule):
         super().__init__("Comms Reset")
 
     def condition(self, data, state):
-        # Check if reset button pressed and comms currently failed
+        # Check if reset triggered (Auto_Select switched to manual) and comms currently failed
         return (
             state.get('COMMS_FAILED', False) and
-            not data.get('Auto_Select')
+            data.falling_edge('Auto_Select')  # Detect switch to manual (reset position)
         )
 
     def action(self, controller, state):
@@ -193,7 +193,7 @@ class InitiateMoveC2toPalm(Rule):
             state.get('OPERATION_MODE') == 'READY' and
             not data.get('S1') and  # No bin on C3
             data.get('S2') and  # Bin present on C2
-            data.get('Klaar_Geweeg_Btn') and  # Button pressed
+            data.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
             data.get('PALM_Run_Signal')  # PALM ready
         )
 
@@ -237,7 +237,7 @@ class InitiateMoveBoth(Rule):
             state.get('OPERATION_MODE') == 'READY' and
             data.get('S1') and  # Bin present on C3
             data.get('S2') and  # Bin present on C2
-            data.get('Klaar_Geweeg_Btn') and  # Button pressed
+            data.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
             data.get('PALM_Run_Signal')  # PALM ready
         )
 
@@ -301,6 +301,76 @@ class EmergencyStopRule(Rule):
         controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
 
 
+class TestKlaarGeweeButtonEdge(Rule):
+    """Test rule: Set state when Klaar_Geweeg button pressed."""
+
+    def __init__(self):
+        super().__init__("Test Klaar Geweeg Button Edge")
+
+    def condition(self, data, state):
+        """Detect button press."""
+        return data.rising_edge('Klaar_Geweeg_Btn')
+
+    def action(self, controller, state):
+        """Set test state value."""
+        state['TEST_KLAAR_GEWEEG_PRESSED'] = True
+        controller.log_manager.info("TEST: Klaar_Geweeg_Btn rising edge detected!")
+
+
+class TestAutoSelectEdge(Rule):
+    """Test rule: Set state when Auto_Select switched off (falling edge)."""
+
+    def __init__(self):
+        super().__init__("Test Auto Select Edge")
+
+    def condition(self, data, state):
+        """Detect auto select switch turned off."""
+        return data.falling_edge('Auto_Select')
+
+    def action(self, controller, state):
+        """Set test state value."""
+        state['TEST_AUTO_SELECT_OFF'] = True
+        controller.log_manager.info("TEST: Auto_Select falling edge detected (turned OFF)!")
+
+
+class TestClearKlaarGeweeButton(Rule):
+    """Test rule: Clear state when no button edge detected."""
+
+    def __init__(self):
+        super().__init__("Test Clear Klaar Geweeg Button")
+
+    def condition(self, data, state):
+        """Clear if no edge and state is set."""
+        return (
+            state.get('TEST_KLAAR_GEWEEG_PRESSED', False) and
+            not data.rising_edge('Klaar_Geweeg_Btn')
+        )
+
+    def action(self, controller, state):
+        """Clear test state value."""
+        state.pop('TEST_KLAAR_GEWEEG_PRESSED', None)
+        controller.log_manager.info("TEST: Cleared Klaar_Geweeg_Btn state")
+
+
+class TestClearAutoSelect(Rule):
+    """Test rule: Clear state when no auto select falling edge detected."""
+
+    def __init__(self):
+        super().__init__("Test Clear Auto Select")
+
+    def condition(self, data, state):
+        """Clear if no edge and state is set."""
+        return (
+            state.get('TEST_AUTO_SELECT_OFF', False) and
+            not data.falling_edge('Auto_Select')
+        )
+
+    def action(self, controller, state):
+        """Clear test state value."""
+        state.pop('TEST_AUTO_SELECT_OFF', None)
+        controller.log_manager.info("TEST: Cleared Auto_Select state")
+
+
 class EmergencyStopResetRule(Rule):
     """Reset E_STOP latch when reset button pressed and E_Stop released."""
 
@@ -308,11 +378,11 @@ class EmergencyStopResetRule(Rule):
         super().__init__("Emergency Stop Reset")
 
     def condition(self, data, state):
-        """Check if reset button pressed and E_Stop released."""
+        """Check if reset triggered (Auto_Select switched to manual) and E_Stop released."""
         return (
             state.get('E_STOP_TRIGGERED') and
             data.get('E_Stop') and  # E_Stop must be released
-            not data.get('Auto_Select')
+            data.falling_edge('Auto_Select')  # Detect switch to manual (reset position)
         )
 
     def action(self, controller, state):
@@ -326,14 +396,22 @@ def setup_rules(rule_engine):
     """Add all rules to the rule engine.
 
     LADDER LOGIC ORDER (like PLC rungs):
-    1. Comms monitoring and reset logic
-    2. System ready checks and OPERATION_MODE management
-    3. Normal operation (state machine transitions)
-    4. EMERGENCY OVERRIDES (E-Stop, comms failure) - ALWAYS LAST
+    1. Test/Debug rules (edge detection tests)
+    2. Comms monitoring and reset logic
+    3. System ready checks and OPERATION_MODE management
+    4. Normal operation (state machine transitions)
+    5. EMERGENCY OVERRIDES (E-Stop, comms failure) - ALWAYS LAST
 
     Args:
         rule_engine: RuleEngine instance
     """
+    # ===== SECTION 0: Test/Debug Rules =====
+    # Uncomment these to test edge detection
+    # rule_engine.add_rule(TestKlaarGeweeButtonEdge())   # Test button edge detection
+    # rule_engine.add_rule(TestAutoSelectEdge())         # Test auto select edge detection
+    # rule_engine.add_rule(TestClearKlaarGeweeButton())  # Clear button test state
+    # rule_engine.add_rule(TestClearAutoSelect())        # Clear auto select test state
+
     # ===== SECTION 1: Communications Monitoring =====
     rule_engine.add_rule(CommsHealthCheckRule())       # Monitor comms health continuously
     rule_engine.add_rule(CommsResetRule())             # Allow reset after comms failure
