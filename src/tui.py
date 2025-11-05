@@ -568,24 +568,23 @@ class ModbusTUI(App):
             with Container(id="outputs-container"):
                 yield Static("Output Coils (Read-Only)", classes="section-title")
 
-                with Horizontal(classes="outputs-row"):
-                    # Get all defined outputs from MODBUS_MAP (sorted by address)
-                    all_outputs = sorted(MODBUS_MAP['OUTPUT']['coils'].items())
+                # Get all defined outputs from MODBUS_MAP (sorted by address)
+                all_outputs = sorted(MODBUS_MAP['OUTPUT']['coils'].items())
 
-                    for address, map_info in all_outputs:
-                        output_number = address + 1  # Convert to 1-indexed for internal tracking
-                        label = map_info.get('label', f'Output {output_number}')
-                        description = map_info.get('description', '')
+                for address, map_info in all_outputs:
+                    # Use 0-indexed address directly for outputs (0, 1, 2, 3)
+                    label = map_info.get('label', f'Output {address}')
+                    description = map_info.get('description', '')
 
-                        widget = InputControl(
-                            input_number=output_number,
-                            label=label,
-                            description=description,
-                            editable=False  # Always read-only for outputs
-                        )
-                        # Store output widgets separately with 'O' prefix to distinguish from inputs
-                        self.output_widgets[output_number] = widget
-                        yield widget
+                    widget = InputControl(
+                        input_number=address,  # Keep 0-indexed for outputs
+                        label=label,
+                        description=description,
+                        editable=False  # Always read-only for outputs
+                    )
+                    # Store output widgets with 0-indexed address
+                    self.output_widgets[address] = widget
+                    yield widget
 
             # Active rules section (if rule engine provided)
             if self.rule_engine:
@@ -758,10 +757,9 @@ class ModbusTUI(App):
 
         # Update output widget states (always read-only)
         for address, widget in self.output_widgets.items():
-            # Convert address (1-indexed) to 0-indexed for MODBUS_MAP lookup
-            map_address = address - 1
+            # Address is already 0-indexed (0, 1, 2, 3)
             from io_mapping import MODBUS_MAP
-            map_info = MODBUS_MAP['OUTPUT']['coils'].get(map_address, {})
+            map_info = MODBUS_MAP['OUTPUT']['coils'].get(address, {})
             label = map_info.get('label', '')
             if label:
                 widget.state = output_data.get(label, False)
