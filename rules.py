@@ -20,6 +20,7 @@ Order matters - add safety rules LAST to ensure they can override normal operati
 """
 
 from src.rule_engine import Rule
+from threading import Timer
 
 
 class CommsHealthCheckRule(Rule):
@@ -143,8 +144,6 @@ class InitiateMoveC3toC2(Rule):
 
     def action(self, controller, state):
         """Set state to MOVING_C3_TO_C2 and schedule motors to start in 30s."""
-        from threading import Timer
-
         # Immediately transition to MOVING state
         state['OPERATION_MODE'] = 'MOVING_C3_TO_C2'
         controller.log_manager.info_once("Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
@@ -222,7 +221,6 @@ class CompleteMoveC2toPalm(Rule):
 
     def action(self, controller, state):
         """Stop MOTOR_2 and return to READY."""
-        from threading import Timer
         # Delayed stop for MOTOR_2 (1 second)
         def stop_motor_2():
             controller.procon.set('output', 'MOTOR_2', False)
@@ -253,11 +251,15 @@ class InitiateMoveBoth(Rule):
 
     def action(self, controller, state):
         """Start both motors and set state to MOVING_BOTH."""
-        if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
-            controller.procon.set('output', 'MOTOR_2', True)
+        def start_motor_3():
             controller.procon.set('output', 'MOTOR_3', True)
+            controller.log_manager.info_once("MOVING_BOTH: started motor 3 after 30 second delay. ")
+
+        if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+            Timer(30.0, start_motor_3).start()
+            controller.procon.set('output', 'MOTOR_2', True)
             state['OPERATION_MODE'] = 'MOVING_BOTH'
-            controller.log_manager.info_once("Started MOVING_BOTH - both motors running")
+            controller.log_manager.info_once("Started MOVING_BOTH - Motor 2 started, Motor 3 will start in 30 seconds")
 
 
 class CompleteMoveBoth(Rule):
@@ -275,8 +277,6 @@ class CompleteMoveBoth(Rule):
 
     def action(self, controller, state):
         """Stop MOTOR_3 immediately, delay MOTOR_2 stop by 2s."""
-        from threading import Timer
-
         # Stop MOTOR_3 immediately
         controller.procon.set('output', 'MOTOR_3', False)
         controller.procon.set('output', 'MOTOR_2', False)
