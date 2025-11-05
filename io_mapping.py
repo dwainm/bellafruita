@@ -30,10 +30,10 @@ MODBUS_MAP = {
     },
     'OUTPUT': {
         'coils': {
-            0: {'label': 'LED_GREEN', 'description': 'Conveyor 1 Motor'},
+            0: {'label': 'LED_GREEN', 'description': 'Comms indicator light.'},
             1: {'label': 'MOTOR_2', 'description': 'Conveyor 2 Motor'},
             2: {'label': 'MOTOR_3', 'description': 'Conveyor 3 Motor'},
-            3: {'label': 'LED_RED', 'description': 'Auxiliary Motor'},
+            3: {'label': 'LED_RED', 'description': 'Create position indicator light.'},
         },
         'registers': {
             0: {'label': 'VERSION', 'description': 'Firmware Version Number'},

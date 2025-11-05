@@ -88,7 +88,7 @@ class ReadyRule(Rule):
             data.get('M1_Trip') and  # Trip signals are normally closed (FALSE = TRIPPED, TRUE = ok)
             data.get('M2_Trip') and
             data.get('DHLM_Trip_Signal') and
-            data.get('E_Stop')  # E_Stop TRUE = not pressed
+            data.get('E_Stop')  # E_Stop True = not pressed
         )
         # Only transition to READY from ERROR or uninitialized state, don't override MOVING states
         current_mode = state.get('OPERATION_MODE')
@@ -129,6 +129,37 @@ class ClearReadyRule(Rule):
         controller.procon.set('output', 'MOTOR_3', False)
         controller.log_manager.warning("Safety violated - OPERATION_MODE set to ERROR")
 
+class CratePositionsSensorLedOn(Rule):
+    """Set Creat Posittion LED on when crates aren't in he right place."""
+    def __init__(self):
+        super().__init__("Crate Posittioning On")
+
+    def condition(self, data, state):
+        """Check if all conditions for READY are met and we're in ERROR state."""
+        return(
+            not data.get('CPS_1') or
+            not data.get('CPS_2')
+        )
+
+    def action(self, controller, state):
+        """Set OPERATION_MODE to READY state."""
+        controller.procon.set('output', 'LED_RED', True)
+
+class CratePositionsSensorLedOff(Rule):
+    """Set Creat Posittion LED on when crates aren't in he right place."""
+    def __init__(self):
+        super().__init__("Crate Posittioning Off")
+
+    def condition(self, data, state):
+        """Check if all conditions for READY are met and we're in ERROR state."""
+        return(
+            data.get('CPS_1') and
+            data.get('CPS_2')
+        )
+
+    def action(self, controller, state):
+        """Set OPERATION_MODE to READY state."""
+        controller.procon.set('output', 'LED_RED', False)
 
 class InitiateMoveC3toC2(Rule):
     """Start C3→C2 move: single bin from C3 to C2 after 30s delay."""
@@ -424,6 +455,11 @@ def setup_rules(rule_engine):
     # ===== SECTION 2: System Ready State Management =====
     rule_engine.add_rule(ReadyRule())                  # Set OPERATION_MODE='READY' when conditions met
     rule_engine.add_rule(ClearReadyRule())             # Set OPERATION_MODE='ERROR' when conditions lost
+
+    # ===== SECTION 3: Creat Possitioning Rules=====
+    # C3→C2 operation (single bin from C3 to C2)
+    rule_engine.add_rule(CratePositionsSensorLedOn())
+    rule_engine.add_rule(CratePositionsSensorLedOff())
 
     # ===== SECTION 3: State Machine Operations =====
     # C3→C2 operation (single bin from C3 to C2)
