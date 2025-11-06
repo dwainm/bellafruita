@@ -2,14 +2,14 @@
 
 Rules can:
 1. Check conditions based on sensor data and system state
-2. Set state variables (e.g., state['READY'] = True)
-3. Trigger actions (e.g., turn motors on/off)
+2. Set state variables (e.g., mem.set('READY', True))
+3. Trigger actions (e.g., turn motors on/off via procon)
 4. Compose complex logic by checking state from other rules
 """
 
 import time
 from typing import Callable, Dict, Any, Optional
-from src.edge_detector import EdgeDetectorDict
+from src.mem import MachineMemory
 
 
 class Rule:
@@ -22,23 +22,23 @@ class Rule:
             def __init__(self):
                 super().__init__("System Ready Check")
 
-            def condition(self, data, state):
-                return data.get('S1') and not data.get('S2')
+            def condition(self, procon, mem):
+                return procon.get('S1') and not procon.get('S2')
 
-            def action(self, controller, state):
-                state['READY'] = True  # Just set state, no motor action
+            def action(self, controller, procon, mem):
+                mem.set_mode('READY')  # Just set state, no motor action
 
         class StartConveyorRule(Rule):
             def __init__(self):
                 super().__init__("Start Conveyor")
 
-            def condition(self, data, state):
-                # Compose logic: if READY state and sensor CS1
-                return state.get('READY', False) and data.get('CS1')
+            def condition(self, procon, mem):
+                # Compose logic: check mode and sensor
+                return mem.mode() == 'READY' and procon.get('CS1')
 
-            def action(self, controller, state):
-                controller.procon.set('output', 'motor_1', True)
-                state['READY'] = False  # Reset state
+            def action(self, controller, procon, mem):
+                procon.set('MOTOR_2', True)
+                mem.set_mode('MOVING')
     """
 
     def __init__(self, name: str):
@@ -52,24 +52,25 @@ class Rule:
         self.last_triggered: Optional[float] = None
         self.trigger_count = 0
 
-    def condition(self, data: Dict[str, Any], state: Dict[str, Any]) -> bool:
+    def condition(self, procon, mem: MachineMemory) -> bool:
         """Check if rule should trigger.
 
         Args:
-            data: Current sensor/register data (e.g., {'S1': True, 'S2': False})
-            state: Shared state dict (e.g., {'READY': True, 'COUNT': 5})
+            procon: Procon API for reading I/O and edge detection
+            mem: Machine memory for reading internal state
 
         Returns:
             True if rule should trigger, False otherwise
         """
         return False
 
-    def action(self, controller, state: Dict[str, Any]) -> None:
+    def action(self, controller, procon, mem: MachineMemory) -> None:
         """Execute rule action.
 
         Args:
             controller: ConveyorController instance
-            state: Shared state dict to read/write
+            procon: Procon API for writing outputs
+            mem: Machine memory for writing internal state
         """
         pass
 
@@ -98,15 +99,15 @@ class RuleEngine:
         """
         self.controller = controller
 
-        # STATE PERSISTENCE (Like PLC Memory):
-        # This dictionary is created ONCE and PERSISTS across all scan cycles.
+        # MEMORY PERSISTENCE (Like PLC Memory):
+        # MachineMemory instance created ONCE and PERSISTS across all scan cycles.
         # Rules can set values that remain until explicitly changed or cleared.
-        # Examples: state['READY'] = True, state['TIMER_START'] = 1234567890
-        # State is NOT rebuilt each scan - only explicit clear() wipes it.
-        self.state: Dict[str, Any] = {}
+        # Examples: mem.set_mode('READY'), mem.set('TIMER_START', 1234567890)
+        # Memory is NOT rebuilt each scan - only explicit clear() wipes it.
+        self.mem = MachineMemory()
 
         self.rules: list[Rule] = []
-        self.active_rules: list[str] = []  # Cleared each scan, state is NOT
+        self.active_rules: list[str] = []  # Cleared each scan, memory is NOT
 
     def add_rule(self, rule: Rule) -> None:
         """Add a rule to the engine.
@@ -124,30 +125,25 @@ class RuleEngine:
         """Evaluate all rules sequentially (ladder logic style).
 
         Executes like a PLC scan:
-        1. Read inputs (sensor_data) - FRESH each scan
+        1. Read inputs (via procon) - FRESH each scan
         2. Execute all rules in order (top to bottom)
         3. Later rules can override earlier rules
         4. Safety rules at the end always take precedence
 
-        IMPORTANT - State Persistence:
-        - sensor_data: Fresh inputs read each scan (like PLC input registers)
-        - self.state: PERSISTS across scans (like PLC memory bits)
+        IMPORTANT - Memory Persistence:
+        - procon.get(): Fresh inputs read each scan (like PLC input registers)
+        - self.mem: PERSISTS across scans (like PLC memory bits)
         - Only active_rules is cleared each scan
-        - State values remain until explicitly changed by rules or cleared
+        - Memory values remain until explicitly changed by rules or cleared
 
         Args:
-            sensor_data: Current sensor/register readings
+            sensor_data: Current sensor/register readings (used to update logs)
         """
-        # Clear active rules list (NOT state - state persists!)
+        # Clear active rules list (NOT memory - memory persists!)
         self.active_rules.clear()
 
-        # Wrap sensor data with edge detection capabilities
-        edge_window_ms = self.controller.config.system.edge_detection_window_ms
-        data_with_edges = EdgeDetectorDict(
-            sensor_data,
-            self.controller.log_manager,
-            edge_window_ms
-        )
+        # Get procon instance from controller (already has edge detection)
+        procon = self.controller.procon
 
         # Execute ALL rules in order (like PLC ladder rungs)
         for rule in self.rules:
@@ -156,14 +152,13 @@ class RuleEngine:
 
             try:
                 # Check if rule should trigger (like ladder contacts)
-                # Pass EdgeDetectorDict which supports both .get() and .rising_edge()/.falling_edge()
-                if rule.condition(data_with_edges, self.state):
+                if rule.condition(procon, self.mem):
                     self.active_rules.append(rule.name)
                     rule.last_triggered = time.time()
                     rule.trigger_count += 1
 
                     # Execute rule action (like ladder coil)
-                    rule.action(self.controller, self.state)
+                    rule.action(self.controller, procon, self.mem)
 
             except Exception as e:
                 self.controller.log_manager.error(f"Error in rule '{rule.name}': {e}")
@@ -177,34 +172,34 @@ class RuleEngine:
         return self.active_rules.copy()
 
     def get_state(self) -> Dict[str, Any]:
-        """Get copy of current state.
+        """Get copy of current memory state.
 
         Returns:
-            Copy of state dictionary
+            Copy of memory state dictionary
         """
-        return self.state.copy()
+        return self.mem._state.copy()
 
     def set_state(self, key: str, value: Any) -> None:
-        """Set a state variable.
+        """Set a memory variable.
 
         Args:
-            key: State variable name
+            key: Memory variable name
             value: Value to set
         """
-        self.state[key] = value
+        self.mem.set(key, value)
 
     def clear_state(self) -> None:
-        """Clear all state variables.
+        """Clear all memory variables.
 
-        IMPORTANT: State is NOT cleared automatically each scan!
-        State only clears when:
+        IMPORTANT: Memory is NOT cleared automatically each scan!
+        Memory only clears when:
         1. This method is called explicitly
-        2. Emergency stop rule calls state.clear()
+        2. Emergency stop rule calls mem.clear()
         3. Manual intervention via API
 
-        Otherwise state persists indefinitely across all scans.
+        Otherwise memory persists indefinitely across all scans.
         """
-        self.state.clear()
+        self.mem.clear()
 
     def enable_rule(self, rule_name: str) -> None:
         """Enable a rule by name.

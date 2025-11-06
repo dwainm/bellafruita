@@ -25,117 +25,114 @@ import time
 
 
 class CommsHealthCheckRule(Rule):
-    """Check comms health using log stack - detect prolonged VERSION=0."""
+    """Check comms health and transition to ERROR_COMMS if failed."""
 
     def __init__(self):
         super().__init__("Comms Health Monitor")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         # Always run this check
         return True
 
-    def action(self, controller, state):
-        """Monitor comms health and set COMMS_FAILED latch if needed."""
-        # Use log manager to check if VERSION has been 0 for last 5 seconds
+    def action(self, controller, procon, mem):
+        """Monitor comms health and set ERROR_COMMS mode if needed."""
         comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
 
-        if not comms_healthy and not state.get('COMMS_FAILED', False):
-            # Comms have failed - latch the failure state
-            state['COMMS_FAILED'] = True
+        if not comms_healthy and mem.mode() != 'ERROR_COMMS':
+            # Comms have failed - enter ERROR_COMMS mode
+            mem.set_mode('ERROR_COMMS')
             controller.log_manager.critical("Communications FAILED - VERSION=0 for 5+ seconds. Reset required!")
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
             # Turn off comms green light
-            controller.procon.set('output', 'LED_GREEN', False)
-        else:
-            # Turn on comms green light
-            controller.procon.set('output', 'LED_GREEN', True)
+            procon.set('LED_GREEN', False)
+        elif comms_healthy:
+            # Turn on comms green light when healthy
+            procon.set('LED_GREEN', True)
 
+
+
+class CommsAcknowledgeRule(Rule):
+    """Acknowledge comms error when operator turns Auto_Select OFF."""
+
+    def __init__(self):
+        super().__init__("Comms Acknowledge")
+
+    def condition(self, procon, mem):
+        return mem.mode() == 'ERROR_COMMS' and procon.falling_edge('Auto_Select')
+
+    def action(self, controller, procon, mem):
+        """Move to acknowledged state."""
+        mem.set_mode('ERROR_COMMS_ACK')
+        controller.log_manager.info("Comms failure ACKNOWLEDGED - turn auto_start switch back ON to reset")
 
 
 class CommsResetRule(Rule):
-    """Reset COMMS_FAILED latch when operator acknowledges by cycling auto_start switch.
-
-    Operator must:
-    1. Turn auto_start switch OFF (this sets COMMS_ACKNOWLEDGED flag)
-    2. Turn auto_start switch back ON (this clears COMMS_FAILED if comms are healthy)
-
-    This ensures the operator has acknowledged the communication failure.
-    """
+    """Reset comms error when operator turns Auto_Select back ON and comms are healthy."""
 
     def __init__(self):
         super().__init__("Comms Reset")
 
-    def condition(self, data, state):
-        # Two-step process:
-        # Step 1: Detect switch turned OFF - this acknowledges the failure
-        if state.get('COMMS_FAILED', False) and data.falling_edge('Auto_Select'):
-            return True
+    def condition(self, procon, mem):
+        return mem.mode() == 'ERROR_COMMS_ACK' and procon.rising_edge('Auto_Select')
 
-        # Step 2: Detect switch turned back ON after acknowledgment
-        if state.get('COMMS_ACKNOWLEDGED', False) and data.rising_edge('Auto_Select'):
-            return True
+    def action(self, controller, procon, mem):
+        """Attempt to clear error if comms are healthy."""
+        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
 
-        return False
-
-    def action(self, controller, state):
-        """Two-step reset process."""
-        # Step 1: Operator turned switch OFF - acknowledge the failure
-        if state.get('COMMS_FAILED', False) and not state.get('COMMS_ACKNOWLEDGED', False):
-            state['COMMS_ACKNOWLEDGED'] = True
-            controller.log_manager.info("Comms failure ACKNOWLEDGED - turn auto_start switch back ON to reset")
-
-        # Step 2: Operator turned switch back ON - clear COMMS_FAILED if comms are healthy
-        elif state.get('COMMS_ACKNOWLEDGED', False):
-            comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
-
-            if comms_healthy:
-                state['COMMS_FAILED'] = False
-                state['COMMS_ACKNOWLEDGED'] = False
-                controller.log_manager.info("Communications RESET - operator acknowledged, system can now restart")
-            else:
-                controller.log_manager.warning("Reset attempted but communications still unhealthy - cannot reset")
+        if comms_healthy:
+            # Comms restored - clear error, will transition to READY via ReadyRule
+            mem.set_mode(None)
+            controller.log_manager.info("Communications RESET - system will transition to READY")
+        else:
+            # Still unhealthy - stay in acknowledged state
+            controller.log_manager.warning("Reset attempted but communications still unhealthy - cannot reset")
 
 
 class ReadyRule(Rule):
-    """Set READY state when all safety conditions are met."""
+    """Set READY mode when all safety conditions are met."""
 
     def __init__(self):
         super().__init__("System Ready Check")
 
-    def condition(self, data, state):
-        """Check if all conditions for READY are met and we're in ERROR state.
+    def condition(self, procon, mem):
+        """Check if all conditions for READY are met.
 
         Trip signals must be TRUE (OK) for 1+ seconds before allowing READY.
         """
         # Immediate checks
         immediate_ok = (
-            data.get('Auto_Select') and
-            not state.get('COMMS_FAILED') and
-            not state.get('E_STOP_TRIGGERED') and
-            data.get('E_Stop')
+            procon.get('Auto_Select') and
+            procon.get('E_Stop')
         )
 
         # Trip signals must be held TRUE (OK) for 1+ seconds
         trips_stable = (
-            data.extended_hold('M1_Trip', True, 1.0) and
-            data.extended_hold('M2_Trip', True, 1.0) and
-            data.extended_hold('DHLM_Trip_Signal', True, 1.0)
+            procon.extended_hold('M1_Trip', True, 1.0) and
+            procon.extended_hold('M2_Trip', True, 1.0) and
+            procon.extended_hold('DHLM_Trip_Signal', True, 1.0)
         )
 
         safety_ok = immediate_ok and trips_stable
 
-        # Only transition to READY from ERROR or uninitialized state, don't override MOVING states
-        current_mode = state.get('OPERATION_MODE')
-        return safety_ok and (current_mode == 'ERROR' or current_mode is None)
+        # Only transition to READY from None/ERROR states, don't override MOVING states
+        # Note: Comms health is checked by CommsHealthCheckRule which sets ERROR_COMMS
+        current_mode = mem.mode()
+        is_error_or_none = (current_mode is None or
+                           (current_mode.startswith('ERROR_') if current_mode else True))
 
-    def action(self, controller, state):
-        """Set OPERATION_MODE to READY state."""
-        state['OPERATION_MODE'] = 'READY'
+        # Don't transition if in an error state
+        in_error = current_mode and current_mode.startswith('ERROR_')
+
+        return safety_ok and is_error_or_none and not in_error
+
+    def action(self, controller, procon, mem):
+        """Set mode to READY."""
+        mem.set_mode('READY')
         controller.log_manager.info("System is READY")
-        controller.procon.set('output', 'MOTOR_2', False)
-        controller.procon.set('output', 'MOTOR_3', False)
-        controller.log_manager.info("READY: Motors OFF ")
+        procon.set('MOTOR_2', False)
+        procon.set('MOTOR_3', False)
+        controller.log_manager.info("READY: Motors OFF")
 
 
 class ClearReadyRule(Rule):
@@ -144,43 +141,43 @@ class ClearReadyRule(Rule):
     def __init__(self):
         super().__init__("Clear Ready State")
 
-    def condition(self, data, state):
-        """Check if OPERATION_MODE should be set to ERROR - overrides any state.
+    def condition(self, procon, mem):
+        """Check if mode should be set to ERROR_SAFETY - overrides any state.
 
         Uses extended_hold() for trip signals to debounce momentary glitches.
         Trip signals must be FALSE for 1+ seconds before triggering error.
         """
         # Immediate failures (no debounce needed)
         immediate_violations = (
-            not data.get('Auto_Select') or
-            state.get('COMMS_FAILED') or
-            state.get('E_STOP_TRIGGERED') or
-            not data.get('E_Stop')  # E_Stop needs immediate response
+            not procon.get('Auto_Select') or
+            mem.mode() == 'ERROR_COMMS' or
+            mem.mode() == 'ERROR_ESTOP' or
+            not procon.get('E_Stop')  # E_Stop needs immediate response
         )
 
         # Trip signals with 1-second debounce to filter out blips
         # Only trigger if they've been FALSE (tripped) for 1+ seconds
         trip_violations = (
-            data.extended_hold('M1_Trip', False, 1.0) or
-            data.extended_hold('M2_Trip', False, 1.0) or
-            data.extended_hold('DHLM_Trip_Signal', False, 1.0)
+            procon.extended_hold('M1_Trip', False, 1.0) or
+            procon.extended_hold('M2_Trip', False, 1.0) or
+            procon.extended_hold('DHLM_Trip_Signal', False, 1.0)
         )
 
         safety_violated = immediate_violations or trip_violations
-        return safety_violated and state.get('OPERATION_MODE') != 'ERROR'
+        return safety_violated and mem.mode() != 'ERROR_SAFETY'
 
-    def action(self, controller, state):
-        """Set OPERATION_MODE to ERROR and stop motors."""
+    def action(self, controller, procon, mem):
+        """Set mode to ERROR_SAFETY and stop motors."""
         # Identify which specific safety conditions are violated
         violations = []
 
-        # Get current data from controller
+        # Get current data
         try:
-            auto_select = controller.procon.get('input', 'Auto_Select')
-            m1_trip = controller.procon.get('input', 'M1_Trip')
-            m2_trip = controller.procon.get('input', 'M2_Trip')
-            dhlm_trip = controller.procon.get('input', 'DHLM_Trip_Signal')
-            e_stop = controller.procon.get('input', 'E_Stop')
+            auto_select = procon.get('Auto_Select')
+            m1_trip = procon.get('M1_Trip')
+            m2_trip = procon.get('M2_Trip')
+            dhlm_trip = procon.get('DHLM_Trip_Signal')
+            e_stop = procon.get('E_Stop')
         except:
             # Fallback if procon.get fails
             auto_select = True
@@ -191,9 +188,9 @@ class ClearReadyRule(Rule):
 
         if not auto_select:
             violations.append("Auto_Select=OFF (not in auto mode)")
-        if state.get('COMMS_FAILED'):
+        if mem.mode() == 'ERROR_COMMS':
             violations.append("COMMS_FAILED (communications lost)")
-        if state.get('E_STOP_TRIGGERED'):
+        if mem.mode() == 'ERROR_ESTOP':
             violations.append("E_STOP_TRIGGERED (emergency stop active)")
         if not m1_trip:
             violations.append("M1_Trip=FALSE (Motor 1 tripped)")
@@ -205,80 +202,80 @@ class ClearReadyRule(Rule):
             violations.append("E_Stop=FALSE (emergency stop pressed)")
 
         # Set error state and stop motors
-        state['OPERATION_MODE'] = 'ERROR'
-        controller.procon.set('output', 'MOTOR_2', False)
-        controller.procon.set('output', 'MOTOR_3', False)
+        mem.set_mode('ERROR_SAFETY')
+        procon.set('MOTOR_2', False)
+        procon.set('MOTOR_3', False)
 
         # Log specific violations
         if violations:
             violation_msg = ", ".join(violations)
-            controller.log_manager.warning(f"Safety violated - OPERATION_MODE set to ERROR: {violation_msg}")
+            controller.log_manager.warning(f"Safety violated - mode set to ERROR_SAFETY: {violation_msg}")
         else:
-            controller.log_manager.warning("Safety violated - OPERATION_MODE set to ERROR (reason unknown)")
+            controller.log_manager.warning("Safety violated - mode set to ERROR_SAFETY (reason unknown)")
 
 class C3ReadyTimerStart(Rule):
-    """Set Creat Posittion LED on when crates aren't in he right place."""
+    """Start C3 timer when S1 is broken."""
     def __init__(self):
         super().__init__("Start Timer When S1 Is broken")
 
-    def condition(self, data, state):
-        """Check if all conditions for READY are met and we're in ERROR state."""
+    def condition(self, procon, mem):
+        """Check if timer should start."""
         return(
-            not data.get('S1') and 
-            'C3_ReadyTimer' not in state
+            not procon.get('S1') and
+            mem.get('C3_ReadyTimer') is None
         )
 
-    def action(self, controller, state):
-        state['C3_ReadyTimer'] = time.time()
+    def action(self, controller, procon, mem):
+        mem.set('C3_ReadyTimer', time.time())
         controller.log_manager.info("C3ReadyTimer - Started")
 
 class C3ReadyTimerReset(Rule):
-    """Set Creat Posittion LED on when crates aren't in he right place."""
+    """Reset C3 timer when S1 is made."""
     def __init__(self):
-        super().__init__("Start Timer When S1 Is broken")
+        super().__init__("Reset Timer When S1 Is made")
 
-    def condition(self, data, state):
-        """Check if all conditions for READY are met and we're in ERROR state."""
+    def condition(self, procon, mem):
+        """Check if timer should reset."""
         return(
-            data.get('S1') and 
-            'C3_ReadyTimer' in state
+            procon.get('S1') and
+            mem.get('C3_ReadyTimer') is not None
         )
 
-    def action(self, controller, state):
-        state.pop('C3_ReadyTimer', None)
+    def action(self, controller, procon, mem):
+        mem.set('C3_ReadyTimer', None)
         controller.log_manager.info("C3ReadyTimer - Reset")
 
 class CratePositionsSensorLedOn(Rule):
-    """Set Creat Posittion LED on when crates aren't in he right place."""
+    """Turn on crate position LED when crates aren't positioned correctly."""
     def __init__(self):
-        super().__init__("Crate Posittioning On")
+        super().__init__("Crate Positioning On")
 
-    def condition(self, data, state):
-        """Check if all conditions for READY are met and we're in ERROR state."""
+    def condition(self, procon, mem):
+        """Check if crates are misaligned."""
         return(
-            not data.get('CPS_1') or
-            not data.get('CPS_2')
+            not procon.get('CPS_1') or
+            not procon.get('CPS_2')
         )
 
-    def action(self, controller, state):
-        """Set OPERATION_MODE to READY state."""
-        controller.procon.set('output', 'LED_RED', True)
+    def action(self, controller, procon, mem):
+        """Turn on red LED."""
+        procon.set('LED_RED', True)
 
 class CratePositionsSensorLedOff(Rule):
-    """Set Creat Posittion LED on when crates aren't in he right place."""
+    """Turn off crate position LED when crates are positioned correctly."""
     def __init__(self):
-        super().__init__("Crate Posittioning Off")
+        super().__init__("Crate Positioning Off")
 
-    def condition(self, data, state):
-        """Check if all conditions for READY are met and we're in ERROR state."""
+    def condition(self, procon, mem):
+        """Check if crates are aligned."""
         return(
-            data.get('CPS_1') and
-            data.get('CPS_2')
+            procon.get('CPS_1') and
+            procon.get('CPS_2')
         )
 
-    def action(self, controller, state):
-        """Set OPERATION_MODE to READY state."""
-        controller.procon.set('output', 'LED_RED', False)
+    def action(self, controller, procon, mem):
+        """Turn off red LED."""
+        procon.set('LED_RED', False)
 
 class InitiateMoveC3toC2(Rule):
     """Start C3→C2 move: single bin from C3 to C2 after 30s delay."""
@@ -286,33 +283,33 @@ class InitiateMoveC3toC2(Rule):
     def __init__(self):
         super().__init__("Initiate Move C3→C2")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if C3→C2 move should start."""
         return (
-            state.get('OPERATION_MODE') == 'READY' and
-            data.get('S2')  and # No bin on C2
-            not data.get('S1') # Bin present on C3
+            mem.mode() == 'READY' and
+            procon.get('S2')  and # No bin on C2
+            not procon.get('S1') # Bin present on C3
         )
 
-    def action(self, controller, state):
-        """Set state to MOVING_C3_TO_C2 and schedule motors to start in 30s."""
+    def action(self, controller, procon, mem):
+        """Set mode to MOVING_C3_TO_C2 and schedule motors to start in 30s."""
         # Immediately transition to MOVING state
-        state['OPERATION_MODE'] = 'MOVING_C3_TO_C2'
+        mem.set_mode('MOVING_C3_TO_C2')
         controller.log_manager.info_once("Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
 
         # Delayed motor start (30 seconds)
         def start_motors():
             # Safety check: verify we're still in correct mode before starting motors
-            current_mode = state.get('OPERATION_MODE')
-            if current_mode == 'MOVING_C3_TO_C2' and not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+            current_mode = mem.mode()
+            if current_mode == 'MOVING_C3_TO_C2' and not mem.mode().startswith('ERROR_'):
                 # Safe to start motors
-                controller.procon.set('output', 'MOTOR_2', True)
-                controller.procon.set('output', 'MOTOR_3', True)
+                procon.set('MOTOR_2', True)
+                procon.set('MOTOR_3', True)
                 controller.log_manager.info_once("MOVING_C3_TO_C2: Motors started after 30s delay")
             else:
                 # State changed during delay - ensure motors are OFF
-                controller.procon.set('output', 'MOTOR_2', False)
-                controller.procon.set('output', 'MOTOR_3', False)
+                procon.set('MOTOR_2', False)
+                procon.set('MOTOR_3', False)
                 controller.log_manager.warning(f"MOVING_C3_TO_C2 delayed start cancelled - system in {current_mode} mode (expected MOVING_C3_TO_C2)")
 
         Timer(30.0, start_motors).start()
@@ -324,18 +321,18 @@ class CompleteMoveC3toC2(Rule):
     def __init__(self):
         super().__init__("Complete Move C3→C2")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if C3→C2 move is complete."""
         return (
-            state.get('OPERATION_MODE') == 'MOVING_C3_TO_C2' and
-            not data.get('S2')  # Bin detected on C2
+            mem.mode() == 'MOVING_C3_TO_C2' and
+            not procon.get('S2')  # Bin detected on C2
         )
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Stop both motors and return to READY."""
-        controller.procon.set('output', 'MOTOR_2', False)
-        controller.procon.set('output', 'MOTOR_3', False)
-        state['OPERATION_MODE'] = 'READY'
+        procon.set('MOTOR_2', False)
+        procon.set('MOTOR_3', False)
+        mem.set_mode('READY')
         controller.log_manager.info("Completed MOVING_C3_TO_C2 - both motors stopped, returning to READY")
         # Clear the log_once cache so we can log the next cycle
         controller.log_manager.clear_logged_once(message="Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
@@ -347,21 +344,21 @@ class InitiateMoveC2toPalm(Rule):
     def __init__(self):
         super().__init__("Initiate Move C2→PALM")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if C2→PALM move should start."""
         return (
-            state.get('OPERATION_MODE') == 'READY' and
-            data.get('S1') and  # No bin on C3
-            not data.get('S2') and  # Bin present on C2
-            data.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
-            data.get('PALM_Run_Signal')  # PALM ready
+            mem.mode() == 'READY' and
+            procon.get('S1') and  # No bin on C3
+            not procon.get('S2') and  # Bin present on C2
+            procon.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
+            procon.get('PALM_Run_Signal')  # PALM ready
         )
 
-    def action(self, controller, state):
-        """Start MOTOR_2 and set state to MOVING_C2_TO_PALM."""
-        if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
-            controller.procon.set('output', 'MOTOR_2', True)
-            state['OPERATION_MODE'] = 'MOVING_C2_TO_PALM'
+    def action(self, controller, procon, mem):
+        """Start MOTOR_2 and set mode to MOVING_C2_TO_PALM."""
+        if not mem.mode().startswith('ERROR_'):
+            procon.set('MOTOR_2', True)
+            mem.set_mode('MOVING_C2_TO_PALM')
             controller.log_manager.info_once("Started MOVING_C2_TO_PALM - MOTOR_2 running")
 
 
@@ -371,20 +368,20 @@ class CompleteMoveC2toPalm(Rule):
     def __init__(self):
         super().__init__("Complete Move C2→PALM")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if C2→PALM move is complete."""
         return (
-            state.get('OPERATION_MODE') == 'MOVING_C2_TO_PALM' and
-            data.get('S2')  # Bin left C2
+            mem.mode() == 'MOVING_C2_TO_PALM' and
+            procon.get('S2')  # Bin left C2
         )
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Stop MOTOR_2 and return to READY."""
         # Delayed stop for MOTOR_2 (1 second)
         def stop_motor_2():
-            controller.procon.set('output', 'MOTOR_2', False)
+            procon.set('MOTOR_2', False)
             controller.log_manager.info_once("MOTOR_2 stopped after 1s delay")
-            state['OPERATION_MODE'] = 'READY'
+            mem.set_mode('READY')
             # Clear the log_once cache for next cycle
             controller.log_manager.clear_logged_once(message="Started MOVING_C2_TO_PALM - MOTOR_2 running")
             controller.log_manager.clear_logged_once(message="MOVING_C2_TO_PALM - MOTOR_2 will stop in 1 seconds.")
@@ -398,21 +395,21 @@ class InitiateMoveBoth(Rule):
     def __init__(self):
         super().__init__("Initiate Move Both")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if both bins move should start."""
         return (
-            state.get('OPERATION_MODE') == 'READY' and
-            not data.get('S1') and  # Bin present on C3
-            not data.get('S2') and  # Bin present on C2
-            data.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
-            data.get('PALM_Run_Signal')  # PALM ready
+            mem.mode() == 'READY' and
+            not procon.get('S1') and  # Bin present on C3
+            not procon.get('S2') and  # Bin present on C2
+            procon.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
+            procon.get('PALM_Run_Signal')  # PALM ready
         )
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
-        if not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+        if not mem.mode().startswith('ERROR_'):
             # Calculate how long bin has been on C3
-            c3_timer_start = state.get('C3_ReadyTimer', None)
+            c3_timer_start = mem.get('C3_ReadyTimer')
             if c3_timer_start:
                 elapsed = time.time() - c3_timer_start
                 # Ensure bin is on C3 for 30 seconds total
@@ -428,21 +425,21 @@ class InitiateMoveBoth(Rule):
             # Start MOTOR_3 with calculated delay
             def start_motor_3():
                 # Safety check: verify we're still in correct mode before starting motor
-                current_mode = state.get('OPERATION_MODE')
-                if current_mode == 'MOVING_BOTH' and not state.get('E_STOP_TRIGGERED') and not state.get('COMMS_FAILED'):
+                current_mode = mem.mode()
+                if current_mode == 'MOVING_BOTH' and not mem.mode().startswith('ERROR_'):
                     # Safe to start motor
-                    controller.procon.set('output', 'MOTOR_3', True)
+                    procon.set('MOTOR_3', True)
                     controller.log_manager.info_once(f"MOVING_BOTH: started motor 3 after {remaining_delay:.1f}s delay")
                 else:
                     # State changed during delay - ensure motor is OFF
-                    controller.procon.set('output', 'MOTOR_3', False)
+                    procon.set('MOTOR_3', False)
                     controller.log_manager.warning(f"Motor 3 delayed start cancelled - system in {current_mode} mode (expected MOVING_BOTH)")
 
             Timer(remaining_delay, start_motor_3).start()
 
             # Start MOTOR_2 immediately
-            controller.procon.set('output', 'MOTOR_2', True)
-            state['OPERATION_MODE'] = 'MOVING_BOTH'
+            procon.set('MOTOR_2', True)
+            mem.set_mode('MOVING_BOTH')
             controller.log_manager.info_once(log_msg)
 
 
@@ -452,18 +449,18 @@ class CompleteMoveBoth(Rule):
     def __init__(self):
         super().__init__("Complete Move Both")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if both bins move is complete."""
         return (
-            state.get('OPERATION_MODE') == 'MOVING_BOTH' and
-            data.falling_edge('S2')  # Bin left C2
+            mem.mode() == 'MOVING_BOTH' and
+            procon.falling_edge('S2')  # Bin left C2
         )
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Stop MOTOR 2 and 3 immediately."""
-        controller.procon.set('output', 'MOTOR_3', False)
-        controller.procon.set('output', 'MOTOR_2', False)
-        state['OPERATION_MODE'] = 'READY'
+        procon.set('MOTOR_3', False)
+        procon.set('MOTOR_2', False)
+        mem.set_mode('READY')
         controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3, MOTOR_2, returning to READY")
 
 
@@ -473,17 +470,16 @@ class EmergencyStopRule(Rule):
     def __init__(self):
         super().__init__("Emergency Stop")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if emergency stop button is pressed."""
-        return not data.get('E_Stop')
+        return not procon.get('E_Stop')
 
-    def action(self, controller, state):
-        """Stop all motors and set OPERATION_MODE to ERROR."""
+    def action(self, controller, procon, mem):
+        """Stop all motors and set mode to ERROR_ESTOP."""
         controller.emergency_stop_all_motors()
-        # Clear all state except the E_STOP_TRIGGERED latch
-        state.clear()
-        state['E_STOP_TRIGGERED'] = True
-        state['OPERATION_MODE'] = 'ERROR'
+        # Clear all memory and set ERROR_ESTOP mode
+        mem.clear()
+        mem.set_mode('ERROR_ESTOP')
         controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
 
 class TestKlaarGeweeButtonEdge(Rule):
@@ -492,13 +488,13 @@ class TestKlaarGeweeButtonEdge(Rule):
     def __init__(self):
         super().__init__("Test Klaar Geweeg Button Edge")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Detect button press."""
-        return data.rising_edge('Klaar_Geweeg_Btn')
+        return procon.rising_edge('Klaar_Geweeg_Btn')
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Set test state value."""
-        state['TEST_KLAAR_GEWEEG_PRESSED'] = True
+        mem.set('TEST_KLAAR_GEWEEG_PRESSED', True)
         controller.log_manager.info("TEST: Klaar_Geweeg_Btn rising edge detected!")
 
 
@@ -508,13 +504,13 @@ class TestAutoSelectEdge(Rule):
     def __init__(self):
         super().__init__("Test Auto Select Edge")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Detect auto select switch turned off."""
-        return data.falling_edge('Auto_Select')
+        return procon.falling_edge('Auto_Select')
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Set test state value."""
-        state['TEST_AUTO_SELECT_OFF'] = True
+        mem.set('TEST_AUTO_SELECT_OFF', True)
         controller.log_manager.info("TEST: Auto_Select falling edge detected (turned OFF)!")
 
 
@@ -524,16 +520,16 @@ class TestClearKlaarGeweeButton(Rule):
     def __init__(self):
         super().__init__("Test Clear Klaar Geweeg Button")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Clear if no edge and state is set."""
         return (
-            state.get('TEST_KLAAR_GEWEEG_PRESSED', False) and
-            not data.rising_edge('Klaar_Geweeg_Btn')
+            mem.get('TEST_KLAAR_GEWEEG_PRESSED', False) and
+            not procon.rising_edge('Klaar_Geweeg_Btn')
         )
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Clear test state value."""
-        state.pop('TEST_KLAAR_GEWEEG_PRESSED', None)
+        mem.set('TEST_KLAAR_GEWEEG_PRESSED', None)
         controller.log_manager.info("TEST: Cleared Klaar_Geweeg_Btn state")
 
 
@@ -543,37 +539,37 @@ class TestClearAutoSelect(Rule):
     def __init__(self):
         super().__init__("Test Clear Auto Select")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Clear if no edge and state is set."""
         return (
-            state.get('TEST_AUTO_SELECT_OFF', False) and
-            not data.falling_edge('Auto_Select')
+            mem.get('TEST_AUTO_SELECT_OFF', False) and
+            not procon.falling_edge('Auto_Select')
         )
 
-    def action(self, controller, state):
+    def action(self, controller, procon, mem):
         """Clear test state value."""
-        state.pop('TEST_AUTO_SELECT_OFF', None)
+        mem.set('TEST_AUTO_SELECT_OFF', None)
         controller.log_manager.info("TEST: Cleared Auto_Select state")
 
 
 class EmergencyStopResetRule(Rule):
-    """Reset E_STOP latch when reset button pressed and E_Stop released."""
+    """Reset ERROR_ESTOP when operator cycles Auto_Select and E_Stop is released."""
 
     def __init__(self):
         super().__init__("Emergency Stop Reset")
 
-    def condition(self, data, state):
+    def condition(self, procon, mem):
         """Check if reset triggered (Auto_Select switched to manual) and E_Stop released."""
         return (
-            state.get('E_STOP_TRIGGERED') and
-            data.get('E_Stop') and  # E_Stop must be released
-            data.falling_edge('Auto_Select')  # Detect switch to manual (reset position)
+            mem.mode() == 'ERROR_ESTOP' and
+            procon.get('E_Stop') and  # E_Stop must be released
+            procon.falling_edge('Auto_Select')  # Detect switch to manual (reset position)
         )
 
-    def action(self, controller, state):
-        """Clear E_STOP_TRIGGERED latch."""
-        state['E_STOP_TRIGGERED'] = False
-        controller.log_manager.info("Emergency stop RESET - system can now restart")
+    def action(self, controller, procon, mem):
+        """Clear ERROR_ESTOP mode."""
+        mem.set_mode(None)
+        controller.log_manager.info("Emergency stop RESET - system will transition to READY")
 
 
 # Function to create all rules and add to engine
@@ -599,11 +595,12 @@ def setup_rules(rule_engine):
 
     # =====  Communications Monitoring =====
     rule_engine.add_rule(CommsHealthCheckRule())       # Monitor comms health continuously
-    rule_engine.add_rule(CommsResetRule())             # Allow reset after comms failure
+    rule_engine.add_rule(CommsAcknowledgeRule())       # Acknowledge comms failure (switch OFF)
+    rule_engine.add_rule(CommsResetRule())             # Reset after acknowledgment (switch ON)
 
     # =====  System Ready State Management =====
-    rule_engine.add_rule(ReadyRule())                  # Set OPERATION_MODE='READY' when conditions met
-    rule_engine.add_rule(ClearReadyRule())             # Set OPERATION_MODE='ERROR' when conditions lost
+    rule_engine.add_rule(ReadyRule())                  # Set mode='READY' when conditions met
+    rule_engine.add_rule(ClearReadyRule())             # Set mode='ERROR_SAFETY' when conditions lost
 
     # =====  C3 Timer Rules=====
     rule_engine.add_rule(C3ReadyTimerStart())
