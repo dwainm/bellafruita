@@ -202,12 +202,14 @@ print_info "Configuration Setup"
 echo "================================================"
 
 # Check if config.py exists and try to read current settings
+CURRENT_SITE_NAME=""
 CURRENT_INPUT_IP=""
 CURRENT_OUTPUT_IP=""
 
 if [ -f "config.py" ]; then
     # Try to read current config (if file is valid Python)
     if python3 -m py_compile config.py 2>/dev/null; then
+        CURRENT_SITE_NAME=$(grep -oP "site_name:\s*['\"]?\K[^'\"]*" config.py 2>/dev/null || echo "")
         CURRENT_INPUT_IP=$(grep -oP "input_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
         CURRENT_OUTPUT_IP=$(grep -oP "output_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
     else
@@ -217,6 +219,7 @@ if [ -f "config.py" ]; then
     if [ "$MODE" == "update" ] && [ -n "$CURRENT_INPUT_IP" ]; then
         # During updates with valid config, ask if user wants to keep or change settings
         print_info "Current configuration detected:"
+        echo "  Site Name:     $CURRENT_SITE_NAME"
         echo "  Input PLC IP:  $CURRENT_INPUT_IP"
         echo "  Output PLC IP: $CURRENT_OUTPUT_IP"
         echo ""
@@ -243,6 +246,7 @@ if [ -f "config.py" ]; then
 fi
 
 # Set defaults if no valid config was found
+CURRENT_SITE_NAME=${CURRENT_SITE_NAME:-"Bella Fruita"}
 CURRENT_INPUT_IP=${CURRENT_INPUT_IP:-"192.168.1.10"}
 CURRENT_OUTPUT_IP=${CURRENT_OUTPUT_IP:-"192.168.1.11"}
 
@@ -255,13 +259,18 @@ if [ "$SKIP_CONFIG" != "true" ]; then
         else
             print_info "Using configuration from environment variables"
         fi
+        SITE_NAME=${SITE_NAME:-${CURRENT_SITE_NAME}}
         INPUT_IP=${INPUT_IP:-${CURRENT_INPUT_IP}}
         OUTPUT_IP=${OUTPUT_IP:-${CURRENT_OUTPUT_IP}}
     else
         echo ""
-        print_info "Please enter your Modbus PLC IP addresses"
+        print_info "Please enter your site/installation details"
         echo "(Press Enter to use default values)"
         echo ""
+
+        # Site Name
+        read -p "Site/Installation Name [${CURRENT_SITE_NAME:-Bella Fruita}]: " SITE_NAME < /dev/tty
+        SITE_NAME=${SITE_NAME:-${CURRENT_SITE_NAME:-Bella Fruita}}
 
         # Input PLC IP
         read -p "Input PLC IP address [${CURRENT_INPUT_IP:-192.168.1.10}]: " INPUT_IP < /dev/tty
@@ -280,18 +289,21 @@ if [ "$SKIP_CONFIG" != "true" ]; then
 
     # Update config.py with sed
     if [ -f "config.py" ]; then
-        # Update input_ip and output_ip
+        # Update site_name, input_ip and output_ip
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS sed syntax
+            sed -i '' "s/site_name: \"[^\"]*\"/site_name: \"$SITE_NAME\"/" config.py
             sed -i '' "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
             sed -i '' "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
         else
             # Linux sed syntax
+            sed -i "s/site_name: \"[^\"]*\"/site_name: \"$SITE_NAME\"/" config.py
             sed -i "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
             sed -i "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
         fi
 
         print_success "Configuration updated:"
+        echo "  Site Name:     $SITE_NAME"
         echo "  Input PLC IP:  $INPUT_IP"
         echo "  Output PLC IP: $OUTPUT_IP"
     else

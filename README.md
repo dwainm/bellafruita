@@ -25,6 +25,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/ins
 ```
 
 The installer will ask you for:
+- Site/Installation name (displayed in TUI)
 - Input PLC IP address
 - Output PLC IP address
 - Auto-start preference (terminal window or background service)
@@ -154,6 +155,7 @@ cd ~/bellafruita
 Edit `~/bellafruita/config.py`:
 
 ```python
+site_name: "Bella Fruita"    # Site name displayed in TUI
 modbus:
   input_ip: "192.168.1.10"   # Input PLC IP
   output_ip: "192.168.1.11"  # Output PLC IP

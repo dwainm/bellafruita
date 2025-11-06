@@ -39,6 +39,7 @@ class AppConfig:
     modbus: ModbusConfig
     system: SystemConfig
     tui: TUIConfig
+    site_name: str = "Bella Fruita"
     use_mock: bool = False
 
     @classmethod

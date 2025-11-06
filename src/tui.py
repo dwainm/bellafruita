@@ -107,9 +107,10 @@ class CommsStatusWidget(Static):
     input_beat = reactive(False)
     output_beat = reactive(False)
 
-    def __init__(self, **kwargs):
+    def __init__(self, site_name: str = "Bella Fruita", **kwargs):
         super().__init__(**kwargs)
         self._initialized = False
+        self._site_name = site_name
         self._status_text = None
         self._input_indicator = None
         self._output_indicator = None
@@ -117,6 +118,8 @@ class CommsStatusWidget(Static):
     def compose(self) -> ComposeResult:
         """Create child widgets."""
         with Horizontal(classes="comms-status-row"):
+            # Site name on the left
+            yield Static(f"[bold cyan]{self._site_name}[/bold cyan]", id="site_name", classes="site-name")
             # Status in the center
             yield Static("[dim]Waiting for connection attempt...[/dim]", id="comms_status_text", classes="comms-status-text")
             # Heartbeat indicators on the right
@@ -518,7 +521,8 @@ class ModbusTUI(App):
 
             # Comms status section (now includes heartbeat)
             with Container(id="comms-status-container"):
-                self.comms_status_widget = CommsStatusWidget()
+                site_name = self.config.site_name if self.config else "Bella Fruita"
+                self.comms_status_widget = CommsStatusWidget(site_name=site_name)
                 yield self.comms_status_widget
 
             # Inputs & Outputs section - Three columns
