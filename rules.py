@@ -76,18 +76,32 @@ class CommsResetRule(Rule):
         return mem.mode() == 'ERROR_COMMS_ACK' and procon.get('Auto_Select')
 
     def action(self, controller, procon, mem):
-        """Attempt to clear error if comms are healthy."""
-        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+        """Attempt to clear error by reconnecting to Modbus."""
+        controller.log_manager.info("Attempting to reconnect Modbus clients...")
 
-        if comms_healthy:
-            # Comms restored - clear mode
-            mem.set_mode(None)
-            controller.log_manager.info("Communications RESET")
-            procon.set('LED_GREEN', True)
-            mem.set_mode('READY')
+        # Close old broken connections
+        controller.input_client.close()
+        controller.output_client.close()
+
+        # Reconnect
+        input_ok = controller.input_client.connect()
+        output_ok = controller.output_client.connect()
+
+        if input_ok and output_ok:
+            controller.log_manager.info("Modbus clients reconnected - checking comms health...")
+            # Now check if comms are actually healthy
+            comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+
+            if comms_healthy:
+                # Success!
+                mem.set_mode(None)
+                controller.log_manager.info("Communications RECONNECTED and RESET")
+                procon.set('LED_GREEN', True)
+                mem.set_mode('READY')
+            else:
+                controller.log_manager.warning("Reconnected but VERSION still 0 - hardware issue?")
         else:
-            # Still unhealthy - stay in acknowledged state
-            controller.log_manager.warning("Communications still unhealthy - cannot reset")
+            controller.log_manager.warning("Failed to reconnect - check network/hardware")
 
 
 class ReadyRule(Rule):
