@@ -31,13 +31,14 @@ class ConveyorController:
             timeout=config.modbus.timeout,
             retries=config.modbus.retries
         )
+        self.log_manager = LogManager(max_entries=config.system.log_stack_size)
         self.procon = Procon(
             self.input_client,
             self.output_client,
             config.modbus.input_slave_id,
-            config.modbus.output_slave_id
+            config.modbus.output_slave_id,
+            self.log_manager
         )
-        self.log_manager = LogManager(max_entries=config.system.log_stack_size)
         self.comms_dead = False
 
     def connect(self) -> bool:

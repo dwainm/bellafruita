@@ -81,12 +81,12 @@ class CommsResetRule(Rule):
         comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
 
         if comms_healthy:
-            # Comms restored - clear error, will transition to READY via ReadyRule
+            # Comms restored - clear mode
             mem.set_mode(None)
-            controller.log_manager.info("Communications RESET - system will transition to READY")
+            controller.log_manager.info("Communications RESET")
         else:
             # Still unhealthy - stay in acknowledged state
-            controller.log_manager.warning("Reset attempted but communications still unhealthy - cannot reset")
+            controller.log_manager.warning("Communications still unhealthy - cannot reset")
 
 
 class ReadyRule(Rule):
@@ -482,76 +482,6 @@ class EmergencyStopRule(Rule):
         mem.set_mode('ERROR_ESTOP')
         controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
 
-class TestKlaarGeweeButtonEdge(Rule):
-    """Test rule: Set state when Klaar_Geweeg button pressed."""
-
-    def __init__(self):
-        super().__init__("Test Klaar Geweeg Button Edge")
-
-    def condition(self, procon, mem):
-        """Detect button press."""
-        return procon.rising_edge('Klaar_Geweeg_Btn')
-
-    def action(self, controller, procon, mem):
-        """Set test state value."""
-        mem.set('TEST_KLAAR_GEWEEG_PRESSED', True)
-        controller.log_manager.info("TEST: Klaar_Geweeg_Btn rising edge detected!")
-
-
-class TestAutoSelectEdge(Rule):
-    """Test rule: Set state when Auto_Select switched off (falling edge)."""
-
-    def __init__(self):
-        super().__init__("Test Auto Select Edge")
-
-    def condition(self, procon, mem):
-        """Detect auto select switch turned off."""
-        return procon.falling_edge('Auto_Select')
-
-    def action(self, controller, procon, mem):
-        """Set test state value."""
-        mem.set('TEST_AUTO_SELECT_OFF', True)
-        controller.log_manager.info("TEST: Auto_Select falling edge detected (turned OFF)!")
-
-
-class TestClearKlaarGeweeButton(Rule):
-    """Test rule: Clear state when no button edge detected."""
-
-    def __init__(self):
-        super().__init__("Test Clear Klaar Geweeg Button")
-
-    def condition(self, procon, mem):
-        """Clear if no edge and state is set."""
-        return (
-            mem.get('TEST_KLAAR_GEWEEG_PRESSED', False) and
-            not procon.rising_edge('Klaar_Geweeg_Btn')
-        )
-
-    def action(self, controller, procon, mem):
-        """Clear test state value."""
-        mem.set('TEST_KLAAR_GEWEEG_PRESSED', None)
-        controller.log_manager.info("TEST: Cleared Klaar_Geweeg_Btn state")
-
-
-class TestClearAutoSelect(Rule):
-    """Test rule: Clear state when no auto select falling edge detected."""
-
-    def __init__(self):
-        super().__init__("Test Clear Auto Select")
-
-    def condition(self, procon, mem):
-        """Clear if no edge and state is set."""
-        return (
-            mem.get('TEST_AUTO_SELECT_OFF', False) and
-            not procon.falling_edge('Auto_Select')
-        )
-
-    def action(self, controller, procon, mem):
-        """Clear test state value."""
-        mem.set('TEST_AUTO_SELECT_OFF', None)
-        controller.log_manager.info("TEST: Cleared Auto_Select state")
-
-
 class EmergencyStopResetRule(Rule):
     """Reset ERROR_ESTOP when operator cycles Auto_Select and E_Stop is released."""
 
@@ -569,7 +499,7 @@ class EmergencyStopResetRule(Rule):
     def action(self, controller, procon, mem):
         """Clear ERROR_ESTOP mode."""
         mem.set_mode(None)
-        controller.log_manager.info("Emergency stop RESET - system will transition to READY")
+        controller.log_manager.info("Emergency stop RESET")
 
 
 # Function to create all rules and add to engine
@@ -586,13 +516,6 @@ def setup_rules(rule_engine):
     Args:
         rule_engine: RuleEngine instance
     """
-    # =====  Test/Debug Rules =====
-    # Uncomment these to test edge detection
-    # rule_engine.add_rule(TestKlaarGeweeButtonEdge())   # Test button edge detection
-    # rule_engine.add_rule(TestAutoSelectEdge())         # Test auto select edge detection
-    # rule_engine.add_rule(TestClearKlaarGeweeButton())  # Clear button test state
-    # rule_engine.add_rule(TestClearAutoSelect())        # Clear auto select test state
-
     # =====  Communications Monitoring =====
     rule_engine.add_rule(CommsHealthCheckRule())       # Monitor comms health continuously
     rule_engine.add_rule(CommsAcknowledgeRule())       # Acknowledge comms failure (switch OFF)

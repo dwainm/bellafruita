@@ -9,7 +9,9 @@
       "Bash(git push:*)",
       "Bash(source venv/bin/activate)",
       "Bash(find:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python main.py:*)"
     ],
     "deny": [],
     "ask": []
