@@ -46,9 +46,6 @@ class CommsHealthCheckRule(Rule):
             controller.emergency_stop_all_motors()
             # Turn off comms green light
             procon.set('LED_GREEN', False)
-        elif comms_healthy:
-            # Turn on comms green light when healthy
-            procon.set('LED_GREEN', True)
 
 
 
@@ -59,7 +56,7 @@ class CommsAcknowledgeRule(Rule):
         super().__init__("Comms Acknowledge")
 
     def condition(self, procon, mem):
-        return mem.mode() == 'ERROR_COMMS' and procon.falling_edge('Auto_Select')
+        return mem.mode() == 'ERROR_COMMS' and procon.get('Manual_Select')
 
     def action(self, controller, procon, mem):
         """Move to acknowledged state."""
@@ -74,7 +71,7 @@ class CommsResetRule(Rule):
         super().__init__("Comms Reset")
 
     def condition(self, procon, mem):
-        return mem.mode() == 'ERROR_COMMS_ACK' and procon.rising_edge('Auto_Select')
+        return mem.mode() == 'ERROR_COMMS_ACK' and procon.get('Auto_Select')
 
     def action(self, controller, procon, mem):
         """Attempt to clear error if comms are healthy."""
@@ -84,6 +81,8 @@ class CommsResetRule(Rule):
             # Comms restored - clear mode
             mem.set_mode(None)
             controller.log_manager.info("Communications RESET")
+            procon.set('LED_GREEN', True)
+            mem.set_mode('READY')
         else:
             # Still unhealthy - stay in acknowledged state
             controller.log_manager.warning("Communications still unhealthy - cannot reset")
@@ -115,16 +114,16 @@ class ReadyRule(Rule):
 
         safety_ok = immediate_ok and trips_stable
 
-        # Only transition to READY from None/ERROR states, don't override MOVING states
-        # Note: Comms health is checked by CommsHealthCheckRule which sets ERROR_COMMS
+        # Only transition to READY from None or ERROR_SAFETY states
+        # Don't override MOVING states or other ERROR states (they have explicit reset logic)
+        # ERROR_COMMS, ERROR_COMMS_ACK, ERROR_ESTOP require explicit operator reset
         current_mode = mem.mode()
-        is_error_or_none = (current_mode is None or
-                           (current_mode.startswith('ERROR_') if current_mode else True))
+        can_transition = (
+            current_mode is None or
+            current_mode == 'ERROR_SAFETY'
+        )
 
-        # Don't transition if in an error state
-        in_error = current_mode and current_mode.startswith('ERROR_')
-
-        return safety_ok and is_error_or_none and not in_error
+        return safety_ok and can_transition
 
     def action(self, controller, procon, mem):
         """Set mode to READY."""
@@ -148,12 +147,12 @@ class ClearReadyRule(Rule):
         Trip signals must be FALSE for 1+ seconds before triggering error.
         """
         # Immediate failures (no debounce needed)
-        immediate_violations = (
-            not procon.get('Auto_Select') or
-            mem.mode() == 'ERROR_COMMS' or
-            mem.mode() == 'ERROR_ESTOP' or
-            not procon.get('E_Stop')  # E_Stop needs immediate response
-        )
+       # immediate_violations = (
+        #    not procon.get('Auto_Select') or
+        #    mem.mode() == 'ERROR_COMMS' or
+       #     mem.mode() == 'ERROR_ESTOP' or
+        #    not procon.get('E_Stop')  # E_Stop needs immediate response
+       # )
 
         # Trip signals with 1-second debounce to filter out blips
         # Only trigger if they've been FALSE (tripped) for 1+ seconds
@@ -163,8 +162,9 @@ class ClearReadyRule(Rule):
             procon.extended_hold('DHLM_Trip_Signal', False, 1.0)
         )
 
-        safety_violated = immediate_violations or trip_violations
-        return safety_violated and mem.mode() != 'ERROR_SAFETY'
+       # safety_violated = immediate_violations or trip_violations
+       # return safety_violated and mem.mode() != 'ERROR_SAFETY'
+        return trip_violations and mem.mode() != 'ERROR_SAFETY'
 
     def action(self, controller, procon, mem):
         """Set mode to ERROR_SAFETY and stop motors."""
@@ -222,12 +222,12 @@ class C3ReadyTimerStart(Rule):
         """Check if timer should start."""
         return(
             not procon.get('S1') and
-            mem.get('C3_ReadyTimer') is None
+            mem.get('C3_Timer') is None
         )
 
     def action(self, controller, procon, mem):
-        mem.set('C3_ReadyTimer', time.time())
-        controller.log_manager.info("C3ReadyTimer - Started")
+        mem.set('C3_Timer', time.time())
+        controller.log_manager.info("C3_Timer - Started")
 
 class C3ReadyTimerReset(Rule):
     """Reset C3 timer when S1 is made."""
@@ -238,12 +238,12 @@ class C3ReadyTimerReset(Rule):
         """Check if timer should reset."""
         return(
             procon.get('S1') and
-            mem.get('C3_ReadyTimer') is not None
+            mem.get('C3_Timer') is not None
         )
 
     def action(self, controller, procon, mem):
-        mem.set('C3_ReadyTimer', None)
-        controller.log_manager.info("C3ReadyTimer - Reset")
+        mem.set('C3_Timer', None)
+        controller.log_manager.info("C3_Timer - Reset")
 
 class CratePositionsSensorLedOn(Rule):
     """Turn on crate position LED when crates aren't positioned correctly."""
@@ -409,7 +409,7 @@ class InitiateMoveBoth(Rule):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
         if not mem.mode().startswith('ERROR_'):
             # Calculate how long bin has been on C3
-            c3_timer_start = mem.get('C3_ReadyTimer')
+            c3_timer_start = mem.get('C3_Timer')
             if c3_timer_start:
                 elapsed = time.time() - c3_timer_start
                 # Ensure bin is on C3 for 30 seconds total
