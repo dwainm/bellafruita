@@ -3,6 +3,8 @@
 Provides a clean API for accessing machine operation mode and other internal state.
 """
 
+from typing import Optional, Any
+
 
 class MachineMemory:
     """Machine memory for storing internal control state.
@@ -21,9 +23,14 @@ class MachineMemory:
         1234567890.5
     """
 
-    def __init__(self):
-        """Initialize empty machine memory."""
+    def __init__(self, logger: Optional[Any] = None):
+        """Initialize empty machine memory.
+
+        Args:
+            logger: Optional logger instance (should have .info() method) for logging mode changes
+        """
         self._state = {}
+        self._logger = logger
 
     def mode(self):
         """Get current operation mode.
@@ -39,7 +46,21 @@ class MachineMemory:
         Args:
             mode: Operation mode string (e.g., 'READY', 'ERROR_COMMS', 'MOVING_C3_TO_C2')
         """
-        self._state['_MODE'] = mode
+        old_mode = self._state.get('_MODE')
+
+        # Only log if mode actually changed
+        if old_mode != mode:
+            self._state['_MODE'] = mode
+
+            # Log the mode change if logger is available
+            if self._logger:
+                if old_mode is None:
+                    self._logger.info(f"Mode: {mode}")
+                else:
+                    self._logger.info(f"Mode: {old_mode} -> {mode}")
+        else:
+            # Mode hasn't changed, just update (no-op really)
+            self._state['_MODE'] = mode
 
     def get(self, key, default=None):
         """Get arbitrary memory value.

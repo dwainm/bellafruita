@@ -12,7 +12,8 @@
       "Bash(pkill:*)",
       "Bash(pip3 install:*)",
       "Bash(python main.py:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(timeout 5 python3:*)"
     ],
     "deny": [],
     "ask": []

@@ -104,7 +104,7 @@ class RuleEngine:
         # Rules can set values that remain until explicitly changed or cleared.
         # Examples: mem.set_mode('READY'), mem.set('TIMER_START', 1234567890)
         # Memory is NOT rebuilt each scan - only explicit clear() wipes it.
-        self.mem = MachineMemory()
+        self.mem = MachineMemory(logger=controller.log_manager)
 
         self.rules: list[Rule] = []
         self.active_rules: list[str] = []  # Cleared each scan, memory is NOT
