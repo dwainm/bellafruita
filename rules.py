@@ -45,8 +45,11 @@ class CommsHealthCheckRule(Rule):
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
 
-        if not comms_healthy:
-            # Turn off comms green light
+        if comms_healthy:
+            # Turn on comms green light
+            procon.set('LED_GREEN', True)
+        else:
+            # Turn Off comms green light
             procon.set('LED_GREEN', False)
 
 

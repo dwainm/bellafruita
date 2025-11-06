@@ -321,19 +321,7 @@ class ModbusTUI(App):
     }
 
     .input-column {
-        width: 50%;
-        height: auto;
-    }
-
-    #outputs-container {
-        margin-top: 1;
-        margin-bottom: 1;
-        border: solid $accent;
-        padding: 1;
-        height: auto;
-    }
-
-    .outputs-row {
+        width: 33%;
         height: auto;
     }
 
@@ -504,14 +492,15 @@ class ModbusTUI(App):
                 self.comms_status_widget = CommsStatusWidget()
                 yield self.comms_status_widget
 
-            # Inputs section - Two columns (now includes holding registers)
+            # Inputs & Outputs section - Three columns
             with Container(id="inputs-container"):
-                yield Static("Input Coils & Registers", classes="section-title")
+                yield Static("Input Coils, Output Coils & Registers", classes="section-title")
 
                 with Horizontal(classes="inputs-columns"):
-                    # Get all defined inputs from MODBUS_MAP (sorted by address)
+                    # Get all defined inputs and outputs from MODBUS_MAP (sorted by address)
                     all_inputs = sorted(MODBUS_MAP['INPUT']['coils'].items())
-                    mid_point = (len(all_inputs) + 1) // 2  # Split into two columns
+                    all_outputs = sorted(MODBUS_MAP['OUTPUT']['coils'].items())
+                    mid_point = (len(all_inputs) + 1) // 2  # Split inputs into two columns
 
                     # Left column (first half of defined inputs)
                     with Vertical(classes="input-column"):
@@ -529,7 +518,7 @@ class ModbusTUI(App):
                             self.input_widgets[input_number] = widget
                             yield widget
 
-                    # Right column (second half of defined inputs + holding register)
+                    # Middle column (second half of defined inputs + holding register)
                     with Vertical(classes="input-column"):
                         for address, map_info in all_inputs[mid_point:]:
                             input_number = address + 1  # Convert to 1-indexed for display
@@ -545,7 +534,7 @@ class ModbusTUI(App):
                             self.input_widgets[input_number] = widget
                             yield widget
 
-                        # Add holding register at bottom of right column
+                        # Add holding register at bottom of middle column
                         with Horizontal(classes="register-row"):
                             yield Label("REG0 (Ver):", classes="register-label-compact")
 
@@ -564,27 +553,22 @@ class ModbusTUI(App):
                                     classes="register-display-compact"
                                 )
 
-            # Output Coils section (read-only display)
-            with Container(id="outputs-container"):
-                yield Static("Output Coils (Read-Only)", classes="section-title")
+                    # Right column (output coils)
+                    with Vertical(classes="input-column"):
+                        for address, map_info in all_outputs:
+                            # Use 0-indexed address directly for outputs (0, 1, 2, 3)
+                            label = map_info.get('label', f'Output {address}')
+                            description = map_info.get('description', '')
 
-                # Get all defined outputs from MODBUS_MAP (sorted by address)
-                all_outputs = sorted(MODBUS_MAP['OUTPUT']['coils'].items())
-
-                for address, map_info in all_outputs:
-                    # Use 0-indexed address directly for outputs (0, 1, 2, 3)
-                    label = map_info.get('label', f'Output {address}')
-                    description = map_info.get('description', '')
-
-                    widget = InputControl(
-                        input_number=address,  # Keep 0-indexed for outputs
-                        label=label,
-                        description=description,
-                        editable=False  # Always read-only for outputs
-                    )
-                    # Store output widgets with 0-indexed address
-                    self.output_widgets[address] = widget
-                    yield widget
+                            widget = InputControl(
+                                input_number=address,  # Keep 0-indexed for outputs
+                                label=label,
+                                description=description,
+                                editable=False  # Always read-only for outputs
+                            )
+                            # Store output widgets with 0-indexed address
+                            self.output_widgets[address] = widget
+                            yield widget
 
             # Active rules section (if rule engine provided)
             if self.rule_engine:
