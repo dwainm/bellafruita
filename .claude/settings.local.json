@@ -11,7 +11,8 @@
       "Bash(find:*)",
       "Bash(pkill:*)",
       "Bash(pip3 install:*)",
-      "Bash(python main.py:*)"
+      "Bash(python main.py:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
