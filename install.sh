@@ -231,7 +231,7 @@ if [ -f "config.py" ]; then
         echo ""
 
         if [ "$NON_INTERACTIVE" != "true" ]; then
-            read -p "Keep these settings? (y/n) [y]: " -n 1 -r
+            read -p "Keep these settings? (y/n) [y]: " -n 1 -r < /dev/tty
             echo
             if [[ $REPLY =~ ^[Nn]$ ]]; then
                 # User wants to change settings - don't preserve
@@ -275,16 +275,16 @@ if [ "$SKIP_CONFIG" != "true" ]; then
         echo ""
 
         # Input PLC IP
-        read -p "Input PLC IP address [${CURRENT_INPUT_IP:-192.168.1.10}]: " INPUT_IP
+        read -p "Input PLC IP address [${CURRENT_INPUT_IP:-192.168.1.10}]: " INPUT_IP < /dev/tty
         INPUT_IP=${INPUT_IP:-${CURRENT_INPUT_IP:-192.168.1.10}}
 
         # Output PLC IP
-        read -p "Output PLC IP address [${CURRENT_OUTPUT_IP:-192.168.1.11}]: " OUTPUT_IP
+        read -p "Output PLC IP address [${CURRENT_OUTPUT_IP:-192.168.1.11}]: " OUTPUT_IP < /dev/tty
         OUTPUT_IP=${OUTPUT_IP:-${CURRENT_OUTPUT_IP:-192.168.1.11}}
 
         # Mock mode
         echo ""
-        read -p "Use mock mode for testing? (y/n) [n]: " -n 1 -r
+        read -p "Use mock mode for testing? (y/n) [n]: " -n 1 -r < /dev/tty
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             USE_MOCK="True"
@@ -332,7 +332,7 @@ if [ "$OS" == "linux" ]; then
     echo "  1) Terminal window (shows TUI on login)"
     echo "  2) Background service (headless, logs to journalctl)"
     echo "  3) No auto-start"
-    read -p "Choose option [1/2/3]: " -n 1 -r
+    read -p "Choose option [1/2/3]: " -n 1 -r < /dev/tty
     echo
 
     if [[ $REPLY == "1" ]]; then
@@ -414,7 +414,7 @@ EOF
         print_info "No auto-start configured"
     fi
 elif [ "$OS" == "macos" ]; then
-    read -p "Would you like to auto-start on login with Terminal window? (y/n) " -n 1 -r
+    read -p "Would you like to auto-start on login with Terminal window? (y/n) " -n 1 -r < /dev/tty
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         PLIST_FILE="$HOME/Library/LaunchAgents/com.bellafruita.app.plist"
