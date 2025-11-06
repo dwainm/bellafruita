@@ -109,9 +109,9 @@ class ReadyRule(Rule):
 
         # Trip signals must be held TRUE (OK) for 1+ seconds
         trips_stable = (
-            procon.extended_hold('M1_Trip', True, 1.0) and
-            procon.extended_hold('M2_Trip', True, 1.0) and
-            procon.extended_hold('DHLM_Trip_Signal', True, 1.0)
+            procon.get('M1_Trip') and
+            procon.get('M2_Trip') and
+            procon.get('DHLM_Trip_Signal')
         )
 
         safety_ok = immediate_ok and trips_stable
