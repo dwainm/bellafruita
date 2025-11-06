@@ -87,6 +87,7 @@ class PollingThread(threading.Thread):
         self.state = state
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
+        self._rotation_counter = 0  # Counter for periodic log rotation
 
     def stop(self) -> None:
         """Signal the thread to stop."""
@@ -148,6 +149,12 @@ class PollingThread(threading.Thread):
 
             except Exception as e:
                 self.controller.log_manager.error(f"Polling thread error: {e}")
+
+            # Rotate log file periodically (every ~1000 loops to avoid excessive file I/O)
+            self._rotation_counter += 1
+            if self._rotation_counter >= 1000:
+                self.controller.log_manager.rotate_log_file()
+                self._rotation_counter = 0
 
             # Sleep for remainder of poll interval
             elapsed = time.time() - loop_start

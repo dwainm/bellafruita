@@ -3,8 +3,11 @@
 from dataclasses import dataclass
 from datetime import datetime
 from collections import deque
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import time
+import json
+import os
+from pathlib import Path
 
 
 @dataclass
@@ -36,16 +39,29 @@ class EventEntry:
 class LogManager:
     """Manages log stacks for Modbus devices."""
 
-    def __init__(self, max_entries: int = 3000):
+    def __init__(self, max_entries: int = 3000, log_file: Optional[str] = None):
         """Initialize log manager.
 
         Args:
             max_entries: Maximum number of log entries to keep per device
+            log_file: Path to persistent log file (default: logs/system_events.jsonl)
         """
+        self.max_entries = max_entries
         self.input_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.output_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.event_logs: deque[EventEntry] = deque(maxlen=max_entries)
         self._logged_once: set[str] = set()  # Track messages logged once
+
+        # Set up log file path
+        if log_file is None:
+            log_file = "logs/system_events.jsonl"
+        self.log_file = Path(log_file)
+
+        # Create logs directory if it doesn't exist
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Load existing logs from file
+        self._load_logs_from_file()
 
     def log_input(self, data: Dict[str, Any]) -> None:
         """Log input module read.
@@ -153,6 +169,9 @@ class LogManager:
         )
         self.event_logs.append(entry)
 
+        # Write to file immediately for persistence
+        self._append_log_to_file(entry)
+
     def info(self, message: str) -> None:
         """Log an info event."""
         self.log_event("INFO", message)
@@ -237,3 +256,103 @@ class LogManager:
             List of recent EventEntry objects
         """
         return list(self.event_logs)[-count:] if self.event_logs else []
+
+    def _load_logs_from_file(self) -> None:
+        """Load event logs from persistent files on startup.
+
+        Loads from both the current file and the backup (.old) file to get more history.
+        """
+        # Load from backup file first (older logs)
+        backup_file = Path(str(self.log_file) + '.old')
+        if backup_file.exists():
+            self._load_single_log_file(backup_file)
+
+        # Then load from current file (newer logs)
+        if self.log_file.exists():
+            self._load_single_log_file(self.log_file)
+
+    def _load_single_log_file(self, file_path: Path) -> None:
+        """Load logs from a single file.
+
+        Args:
+            file_path: Path to log file to load
+        """
+        try:
+            with open(file_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    try:
+                        data = json.loads(line)
+                        entry = EventEntry(
+                            timestamp=data['timestamp'],
+                            level=data['level'],
+                            message=data['message']
+                        )
+                        self.event_logs.append(entry)
+                    except (json.JSONDecodeError, KeyError) as e:
+                        # Skip malformed lines
+                        continue
+
+        except Exception as e:
+            # If we can't load logs, just skip this file
+            print(f"Warning: Could not load logs from {file_path}: {e}")
+
+    def _append_log_to_file(self, entry: EventEntry) -> None:
+        """Append a single log entry to the persistent file.
+
+        Args:
+            entry: EventEntry to write to file
+        """
+        try:
+            with open(self.log_file, 'a') as f:
+                data = {
+                    'timestamp': entry.timestamp,
+                    'level': entry.level,
+                    'message': entry.message,
+                    'formatted_time': entry.get_formatted_time()
+                }
+                f.write(json.dumps(data) + '\n')
+        except Exception as e:
+            # Silently fail - don't crash the app if we can't write logs
+            pass
+
+    def rotate_log_file(self) -> None:
+        """Rotate log file if it gets too large.
+
+        Creates a new file and deletes the old backup, keeping only 2 files at a time:
+        - system_events.jsonl (current)
+        - system_events.jsonl.old (previous rotation)
+        """
+        if not self.log_file.exists():
+            return
+
+        try:
+            # Check file size or line count
+            line_count = 0
+            with open(self.log_file, 'r') as f:
+                for _ in f:
+                    line_count += 1
+
+            # Only rotate if we've exceeded max_entries
+            if line_count <= self.max_entries:
+                return
+
+            # Define backup file path
+            backup_file = Path(str(self.log_file) + '.old')
+
+            # Delete old backup if it exists
+            if backup_file.exists():
+                backup_file.unlink()
+
+            # Rename current file to backup
+            self.log_file.rename(backup_file)
+
+            # New file will be created automatically on next log write
+            # (by _append_log_to_file)
+
+        except Exception as e:
+            # Silently fail - don't crash if rotation fails
+            pass
