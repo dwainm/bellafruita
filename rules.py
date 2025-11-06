@@ -38,12 +38,14 @@ class CommsHealthCheckRule(Rule):
         """Monitor comms health and set ERROR_COMMS mode if needed."""
         comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
 
-        if not comms_healthy and mem.mode() != 'ERROR_COMMS':
+        if not comms_healthy and mem.mode() != 'ERROR_COMMS' and mem.mode() != "ERROR_COMMS_ACK":
             # Comms have failed - enter ERROR_COMMS mode
             mem.set_mode('ERROR_COMMS')
             controller.log_manager.critical("Communications FAILED - VERSION=0 for 5+ seconds. Reset required!")
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
+
+        if not comms_healthy:
             # Turn off comms green light
             procon.set('LED_GREEN', False)
 
