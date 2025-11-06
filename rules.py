@@ -149,12 +149,12 @@ class ClearReadyRule(Rule):
         Trip signals must be FALSE for 1+ seconds before triggering error.
         """
         # Immediate failures (no debounce needed)
-       # immediate_violations = (
-        #    not procon.get('Auto_Select') or
+        immediate_violations = (
+            procon.get('Manual_Select') #or
         #    mem.mode() == 'ERROR_COMMS' or
        #     mem.mode() == 'ERROR_ESTOP' or
         #    not procon.get('E_Stop')  # E_Stop needs immediate response
-       # )
+       )
 
         # Trip signals with 1-second debounce to filter out blips
         # Only trigger if they've been FALSE (tripped) for 1+ seconds
@@ -166,7 +166,7 @@ class ClearReadyRule(Rule):
 
        # safety_violated = immediate_violations or trip_violations
        # return safety_violated and mem.mode() != 'ERROR_SAFETY'
-        return trip_violations and mem.mode() != 'ERROR_SAFETY'
+        return immediate_violations and trip_violations and mem.mode() != 'ERROR_SAFETY'
 
     def action(self, controller, procon, mem):
         """Set mode to ERROR_SAFETY and stop motors."""
