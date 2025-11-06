@@ -15,7 +15,7 @@ MODBUS_MAP = {
             5: {'label': 'M1_Trip', 'description': 'Conveyor 1 Motor Drive Trip'},
             6: {'label': 'M2_Trip', 'description': 'Conveyor 2 Motor Drive Trip'},
             7: {'label': 'E_Stop', 'description': 'Emergency Stop Button'},
-           # 8: {'label': 'Manual_Select', 'description': 'Selector Switch Manual'},
+            8: {'label': 'Manual_Select', 'description': 'Selector Switch Manual'},
             9: {'label': 'Auto_Select', 'description': 'Selector Switch Auto'},
             10: {'label': 'Klaar_Geweeg_Btn', 'description': 'Klaar Geweeg Button (Ready Weighed)'},
             11: {'label': 'CPS_1', 'description': 'Crate position sensor 1'},
