@@ -201,32 +201,67 @@ echo ""
 print_info "Configuration Setup"
 echo "================================================"
 
-# Check if config.py exists
-if [ -f "config.py" ]; then
-    # Read current config
-    CURRENT_INPUT_IP=$(grep -oP "input_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "192.168.1.10")
-    CURRENT_OUTPUT_IP=$(grep -oP "output_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "192.168.1.11")
-    CURRENT_USE_MOCK=$(grep -oP "use_mock:\s*\K(True|False)" config.py 2>/dev/null || echo "False")
+# Check if config.py exists and try to read current settings
+CURRENT_INPUT_IP=""
+CURRENT_OUTPUT_IP=""
+CURRENT_USE_MOCK=""
 
-    if [ "$MODE" == "update" ]; then
-        # During updates, skip configuration by default
-        # Users can run ./update_ip.sh to change IPs
+if [ -f "config.py" ]; then
+    # Try to read current config (if file is valid Python)
+    if python3 -m py_compile config.py 2>/dev/null; then
+        CURRENT_INPUT_IP=$(grep -oP "input_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
+        CURRENT_OUTPUT_IP=$(grep -oP "output_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
+        CURRENT_USE_MOCK=$(grep -oP "use_mock:\s*\K(True|False)" config.py 2>/dev/null || echo "")
+    else
+        print_warning "Existing config.py has syntax errors - will be replaced with template"
+    fi
+
+    if [ "$MODE" == "update" ] && [ -n "$CURRENT_INPUT_IP" ]; then
+        # During updates with valid config, ask if user wants to keep or change settings
         print_info "Current configuration detected:"
         echo "  Input PLC IP:  $CURRENT_INPUT_IP"
         echo "  Output PLC IP: $CURRENT_OUTPUT_IP"
         echo "  Mock Mode:     $CURRENT_USE_MOCK"
-        print_info "Keeping existing configuration (use ./update_ip.sh to change)"
-        SKIP_CONFIG=true
+        echo ""
+
+        if [ "$NON_INTERACTIVE" != "true" ]; then
+            read -p "Keep these settings? (y/n) [y]: " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
+                # User wants to change settings - don't preserve
+                PRESERVE_CONFIG=false
+            else
+                # User wants to keep settings
+                PRESERVE_CONFIG=true
+                print_info "Keeping existing configuration"
+            fi
+        else
+            # Non-interactive mode - always preserve during updates
+            PRESERVE_CONFIG=true
+            print_info "Keeping existing configuration (non-interactive mode)"
+        fi
+    else
+        PRESERVE_CONFIG=false
     fi
 fi
 
+# Set defaults if no valid config was found
+CURRENT_INPUT_IP=${CURRENT_INPUT_IP:-"192.168.1.10"}
+CURRENT_OUTPUT_IP=${CURRENT_OUTPUT_IP:-"192.168.1.11"}
+CURRENT_USE_MOCK=${CURRENT_USE_MOCK:-"False"}
+
 if [ "$SKIP_CONFIG" != "true" ]; then
     # Use env vars if set (non-interactive mode), otherwise prompt
-    if [ "$NON_INTERACTIVE" == "true" ]; then
-        print_info "Using configuration from environment variables"
-        INPUT_IP=${INPUT_IP:-${CURRENT_INPUT_IP:-192.168.1.10}}
-        OUTPUT_IP=${OUTPUT_IP:-${CURRENT_OUTPUT_IP:-192.168.1.11}}
-        USE_MOCK=${USE_MOCK:-${CURRENT_USE_MOCK:-False}}
+    if [ "$NON_INTERACTIVE" == "true" ] || [ "$PRESERVE_CONFIG" == "true" ]; then
+        # Non-interactive mode OR user chose to preserve config
+        if [ "$PRESERVE_CONFIG" == "true" ]; then
+            print_info "Applying existing configuration"
+        else
+            print_info "Using configuration from environment variables"
+        fi
+        INPUT_IP=${INPUT_IP:-${CURRENT_INPUT_IP}}
+        OUTPUT_IP=${OUTPUT_IP:-${CURRENT_OUTPUT_IP}}
+        USE_MOCK=${USE_MOCK:-${CURRENT_USE_MOCK}}
     else
         echo ""
         print_info "Please enter your Modbus PLC IP addresses"
@@ -433,6 +468,15 @@ cat > "$INSTALL_DIR/start.sh" << 'EOF'
 # Bella Fruita - Start Script with Remote Viewing Support
 cd "$(dirname "$0")"
 source venv/bin/activate
+
+# Validate Python syntax before starting
+if ! python -m py_compile main.py config.py 2>/dev/null; then
+    echo "ERROR: Python syntax errors detected in application files."
+    echo "Please run './update.sh' to get the latest code."
+    echo ""
+    python -m py_compile main.py config.py
+    exit 1
+fi
 
 # Configuration
 TTYD_PORT=7681  # Port for remote web-based terminal viewing
