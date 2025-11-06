@@ -1,10 +1,10 @@
 #!/bin/bash
 # Bella Fruita Control System - Installer/Updater
 # Usage:
-#   Interactive: curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh | bash
+#   Interactive: bash <(curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh)
 #   Non-interactive:
-#     INPUT_IP=192.168.1.10 OUTPUT_IP=192.168.1.11 curl -sSL https://... | bash
-#     SKIP_CONFIG=true curl -sSL https://... | bash  # Skip config prompts
+#     INPUT_IP=192.168.1.10 OUTPUT_IP=192.168.1.11 bash <(curl -sSL https://...)
+#     SKIP_CONFIG=true bash <(curl -sSL https://...)  # Skip config prompts
 
 set -e  # Exit on error
 
@@ -551,7 +551,7 @@ cat > "$INSTALL_DIR/update.sh" << 'EOF'
 # Update Bella Fruita code from GitHub
 # Configuration (IP addresses) will be preserved
 echo "Updating Bella Fruita from GitHub..."
-curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh | bash
+bash <(curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh)
 EOF
 chmod +x "$INSTALL_DIR/update.sh"
 
