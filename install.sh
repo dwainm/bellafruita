@@ -8,6 +8,12 @@
 
 set -e  # Exit on error
 
+# Fix stdin for interactive input when piped from curl
+# This reopens stdin from the terminal so read commands work
+if [ ! -t 0 ]; then
+    exec < /dev/tty
+fi
+
 # Configuration
 REPO_URL="https://github.com/dwainm/bellafruita"
 INSTALL_DIR="$HOME/bellafruita"
