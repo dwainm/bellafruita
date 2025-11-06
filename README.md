@@ -21,7 +21,7 @@ Bella Fruita controls conveyor feeders for an apple sorting machine using PLC la
 
 ### Interactive Mode (Recommended)
 ```bash
-curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/bellafruita/master/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh | bash
 ```
 
 The installer will ask you for:
@@ -33,12 +33,12 @@ The installer will ask you for:
 ### Non-Interactive Mode (Automated Deployment)
 ```bash
 INPUT_IP=192.168.1.10 OUTPUT_IP=192.168.1.11 USE_MOCK=False \
-  curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/bellafruita/master/install.sh | bash
+  curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh | bash
 ```
 
 Or skip configuration entirely:
 ```bash
-SKIP_CONFIG=true curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/bellafruita/master/install.sh | bash
+SKIP_CONFIG=true curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh | bash
 ```
 
 **What gets installed:**
