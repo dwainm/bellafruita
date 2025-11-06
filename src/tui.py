@@ -154,20 +154,49 @@ class CommsStatusWidget(Static):
         self.input_beat = False
         self.output_beat = False
 
-    def set_status(self, dead: bool) -> None:
-        """Update comms status."""
+    def set_status(self, mode: str, comms_healthy: bool) -> None:
+        """Update comms status and mode display.
+
+        Args:
+            mode: Current operation mode (e.g., 'READY', 'ERROR_COMMS', 'MOVING_C3_TO_C2')
+            comms_healthy: Whether communications are healthy
+        """
         if not self._status_text:
             return
 
         self._initialized = True
-        if dead:
-            # Reset heartbeat indicators when comms are dead
-            self.reset_pulses()
-            # Comms dead - show warning (operator must cycle Auto_Select switch to reset)
-            self._status_text.update("[bold red on yellow] ⚠️  COMMUNICATIONS FAILED - CYCLE AUTO_SELECT SWITCH TO RESET [/bold red on yellow]")
+
+        # Determine status based on mode
+        if mode and mode.startswith('ERROR_'):
+            # Error state - show in red
+            if mode == 'ERROR_COMMS' or mode == 'ERROR_COMMS_ACK':
+                self.reset_pulses()
+                if mode == 'ERROR_COMMS_ACK':
+                    self._status_text.update("[bold black on yellow] ⚠️  COMMS ERROR ACKNOWLEDGED - SWITCH TO AUTO TO RESET [/bold black on yellow]")
+                else:
+                    self._status_text.update("[bold white on red] ⚠️  COMMUNICATIONS FAILED - SWITCH TO MANUAL TO ACKNOWLEDGE [/bold white on red]")
+            elif mode == 'ERROR_ESTOP':
+                self.reset_pulses()
+                self._status_text.update("[bold white on red] 🛑 EMERGENCY STOP - RELEASE E-STOP AND CYCLE AUTO SWITCH [/bold white on red]")
+            elif mode == 'ERROR_SAFETY':
+                self._status_text.update("[bold black on yellow] ⚠️  SAFETY ERROR - CHECK TRIP SIGNALS [/bold black on yellow]")
+            else:
+                self._status_text.update(f"[bold white on red] ERROR: {mode} [/bold white on red]")
+        elif mode == 'READY':
+            # Ready state - show in green
+            self._status_text.update("[bold black on green] ✓ READY [/bold black on green]")
+        elif mode and mode.startswith('MOVING_'):
+            # Moving state - show in blue
+            self._status_text.update(f"[bold black on cyan] ▶ {mode} [/bold black on cyan]")
+        elif mode is None:
+            # No mode set yet
+            if comms_healthy:
+                self._status_text.update("[bold cyan] Initializing... [/bold cyan]")
+            else:
+                self._status_text.update("[bold white on red] ⚠️  COMMS UNHEALTHY [/bold white on red]")
         else:
-            # Comms OK - show connected
-            self._status_text.update("[bold black on green] ✓ CONNECTED [/bold black on green]")
+            # Unknown state
+            self._status_text.update(f"[bold] MODE: {mode} [/bold]")
 
 
 class EventLogWidget(Static):
@@ -616,25 +645,19 @@ class ModbusTUI(App):
         self.connected = self.controller.connect()
 
         if self.connected:
-            self.comms_status_widget.update("[bold green]✓ Connected to Modbus terminals[/bold green]")
             # Update shared state
             if self.shared_state:
                 with self.shared_state.lock:
                     self.shared_state.connected = True
-            # Update comms status to connected
-            if self.comms_status_widget:
-                self.comms_status_widget.set_status(False)
-            # Hide connection status after 2 seconds
-            self.set_timer(2.0, lambda: self.comms_status_widget.update(""))
+            # Status will be updated by render_state()
         else:
-            self.comms_status_widget.update("[bold red]✗ Failed to connect - Check event log[/bold red]")
             # Update shared state
             if self.shared_state:
                 with self.shared_state.lock:
                     self.shared_state.connected = False
-            # Set comms dead status
+            # Show initial error
             if self.comms_status_widget:
-                self.comms_status_widget.set_status(True)
+                self.comms_status_widget.set_status(None, False)
 
     @on(Switch.Changed)
     def on_switch_changed_event(self, event: Switch.Changed) -> None:
@@ -707,9 +730,18 @@ class ModbusTUI(App):
         comms_failed = snapshot['comms_failed']
         input_heartbeat = snapshot['input_heartbeat']
         output_heartbeat = snapshot['output_heartbeat']
+        rule_state = snapshot['rule_state']
 
-        # Update comms status
-        self.comms_status_widget.set_status(comms_failed)
+        # Get current mode from rule state
+        mode = rule_state.get('_MODE')
+
+        # Determine if comms are actually healthy
+        # Check VERSION register - if it's 0 or missing, comms might be bad
+        version = output_data.get('VERSION', 0)
+        comms_healthy = (version != 0) and not comms_failed
+
+        # Update comms status with mode
+        self.comms_status_widget.set_status(mode, comms_healthy)
 
         # Pulse heartbeat indicators if data is fresh (heartbeat changed)
         if input_heartbeat != self.last_input_heartbeat:

@@ -46,7 +46,9 @@ class SystemState:
         """Update rule engine state (must be called with lock held)."""
         self.rule_state = rule_state.copy()
         self.active_rules = active_rules.copy()
-        self.comms_failed = rule_state.get('COMMS_FAILED', False)
+        # Derive comms_failed from mode
+        mode = rule_state.get('_MODE')
+        self.comms_failed = mode in ('ERROR_COMMS', 'ERROR_COMMS_ACK')
 
     def get_snapshot(self) -> dict:
         """Get a thread-safe snapshot of all state."""
