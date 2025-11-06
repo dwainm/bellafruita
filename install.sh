@@ -14,7 +14,7 @@ INSTALL_DIR="$HOME/bellafruita"
 PYTHON_MIN_VERSION="3.9"
 
 # Check for non-interactive mode (env vars set)
-if [ -n "$INPUT_IP" ] || [ -n "$OUTPUT_IP" ] || [ -n "$USE_MOCK" ]; then
+if [ -n "$INPUT_IP" ] || [ -n "$OUTPUT_IP" ]; then
     NON_INTERACTIVE=true
     print_info "Running in non-interactive mode (env vars detected)"
 fi
@@ -204,14 +204,12 @@ echo "================================================"
 # Check if config.py exists and try to read current settings
 CURRENT_INPUT_IP=""
 CURRENT_OUTPUT_IP=""
-CURRENT_USE_MOCK=""
 
 if [ -f "config.py" ]; then
     # Try to read current config (if file is valid Python)
     if python3 -m py_compile config.py 2>/dev/null; then
         CURRENT_INPUT_IP=$(grep -oP "input_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
         CURRENT_OUTPUT_IP=$(grep -oP "output_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
-        CURRENT_USE_MOCK=$(grep -oP "use_mock:\s*\K(True|False)" config.py 2>/dev/null || echo "")
     else
         print_warning "Existing config.py has syntax errors - will be replaced with template"
     fi
@@ -221,7 +219,6 @@ if [ -f "config.py" ]; then
         print_info "Current configuration detected:"
         echo "  Input PLC IP:  $CURRENT_INPUT_IP"
         echo "  Output PLC IP: $CURRENT_OUTPUT_IP"
-        echo "  Mock Mode:     $CURRENT_USE_MOCK"
         echo ""
 
         if [ "$NON_INTERACTIVE" != "true" ]; then
@@ -248,7 +245,6 @@ fi
 # Set defaults if no valid config was found
 CURRENT_INPUT_IP=${CURRENT_INPUT_IP:-"192.168.1.10"}
 CURRENT_OUTPUT_IP=${CURRENT_OUTPUT_IP:-"192.168.1.11"}
-CURRENT_USE_MOCK=${CURRENT_USE_MOCK:-"False"}
 
 if [ "$SKIP_CONFIG" != "true" ]; then
     # Use env vars if set (non-interactive mode), otherwise prompt
@@ -261,7 +257,6 @@ if [ "$SKIP_CONFIG" != "true" ]; then
         fi
         INPUT_IP=${INPUT_IP:-${CURRENT_INPUT_IP}}
         OUTPUT_IP=${OUTPUT_IP:-${CURRENT_OUTPUT_IP}}
-        USE_MOCK=${USE_MOCK:-${CURRENT_USE_MOCK}}
     else
         echo ""
         print_info "Please enter your Modbus PLC IP addresses"
@@ -275,16 +270,6 @@ if [ "$SKIP_CONFIG" != "true" ]; then
         # Output PLC IP
         read -p "Output PLC IP address [${CURRENT_OUTPUT_IP:-192.168.1.11}]: " OUTPUT_IP < /dev/tty
         OUTPUT_IP=${OUTPUT_IP:-${CURRENT_OUTPUT_IP:-192.168.1.11}}
-
-        # Mock mode
-        echo ""
-        read -p "Use mock mode for testing? (y/n) [n]: " -n 1 -r < /dev/tty
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            USE_MOCK="True"
-        else
-            USE_MOCK="False"
-        fi
     fi
 
     # Backup existing config
@@ -295,23 +280,20 @@ if [ "$SKIP_CONFIG" != "true" ]; then
 
     # Update config.py with sed
     if [ -f "config.py" ]; then
-        # Update input_ip
+        # Update input_ip and output_ip
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS sed syntax
             sed -i '' "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
             sed -i '' "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
-            sed -i '' "s/use_mock: .*/use_mock: $USE_MOCK/" config.py
         else
             # Linux sed syntax
             sed -i "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
             sed -i "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
-            sed -i "s/use_mock: .*/use_mock: $USE_MOCK/" config.py
         fi
 
         print_success "Configuration updated:"
         echo "  Input PLC IP:  $INPUT_IP"
         echo "  Output PLC IP: $OUTPUT_IP"
-        echo "  Mock Mode:     $USE_MOCK"
     else
         print_warning "config.py not found - please configure manually"
     fi

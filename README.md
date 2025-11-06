@@ -27,12 +27,11 @@ bash <(curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/ins
 The installer will ask you for:
 - Input PLC IP address
 - Output PLC IP address
-- Whether to use mock mode
 - Auto-start preference (terminal window or background service)
 
 ### Non-Interactive Mode (Automated Deployment)
 ```bash
-INPUT_IP=192.168.1.10 OUTPUT_IP=192.168.1.11 USE_MOCK=False \
+INPUT_IP=192.168.1.10 OUTPUT_IP=192.168.1.11 \
   bash <(curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh)
 ```
 
@@ -240,9 +239,7 @@ Logs persist across restarts and crashes.
 ### Mock Mode (Test Without Hardware)
 ```bash
 cd ~/bellafruita
-./update_ip.sh
-# Set mock mode to 'y'
-./start.sh
+python main.py --mock
 ```
 
 ### Manual Installation
