@@ -1,7 +1,7 @@
 #!/bin/bash
 # Bella Fruita Control System - Installer/Updater
 # Usage:
-#   Interactive: curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/bellafruita/master/install.sh | bash
+#   Interactive: curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh | bash
 #   Non-interactive:
 #     INPUT_IP=192.168.1.10 OUTPUT_IP=192.168.1.11 curl -sSL https://... | bash
 #     SKIP_CONFIG=true curl -sSL https://... | bash  # Skip config prompts
@@ -9,8 +9,7 @@
 set -e  # Exit on error
 
 # Configuration
-REPO_URL="https://github.com/YOUR_USERNAME/bellafruita.git"
-BRANCH="master"
+REPO_URL="https://github.com/dwainm/bellafruita"
 INSTALL_DIR="$HOME/bellafruita"
 PYTHON_MIN_VERSION="3.9"
 
@@ -154,9 +153,8 @@ if [ "$MODE" == "update" ]; then
         git stash save "Auto-stash before update $(date '+%Y-%m-%d %H:%M:%S')"
     fi
 
-    # Pull latest
-    git fetch origin
-    git reset --hard origin/$BRANCH
+    # Pull latest from default branch
+    git pull --force
     print_success "Code updated to latest version"
 
 else
@@ -168,8 +166,8 @@ else
         rm -rf "$INSTALL_DIR"
     fi
 
-    # Clone repository
-    git clone -b $BRANCH $REPO_URL "$INSTALL_DIR"
+    # Clone repository (uses default branch)
+    git clone $REPO_URL "$INSTALL_DIR"
     cd "$INSTALL_DIR"
     print_success "Repository cloned"
 fi
@@ -509,7 +507,7 @@ cat > "$INSTALL_DIR/update.sh" << 'EOF'
 # Update Bella Fruita code from GitHub
 # Configuration (IP addresses) will be preserved
 echo "Updating Bella Fruita from GitHub..."
-curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/bellafruita/master/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/dwainm/bellafruita/master/install.sh | bash
 EOF
 chmod +x "$INSTALL_DIR/update.sh"
 
