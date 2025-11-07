@@ -20,9 +20,9 @@ if [ ! -f "config.py" ]; then
 fi
 
 # Read current values
-CURRENT_INPUT_IP=$(grep -oP "input_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "192.168.1.10")
-CURRENT_OUTPUT_IP=$(grep -oP "output_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "192.168.1.11")
-CURRENT_USE_MOCK=$(grep -oP "use_mock:\s*\K(True|False)" config.py 2>/dev/null || echo "False")
+CURRENT_INPUT_IP=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[0-9.]+' config.py 2>/dev/null || echo "192.168.1.10")
+CURRENT_OUTPUT_IP=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[0-9.]+' config.py 2>/dev/null || echo "192.168.1.11")
+CURRENT_USE_MOCK=$(grep -oP '^\s*use_mock:\s*bool\s*=\s*\K(True|False)' config.py 2>/dev/null || echo "False")
 
 echo "Current configuration:"
 echo "  Input PLC IP:  $CURRENT_INPUT_IP"
