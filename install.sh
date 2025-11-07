@@ -10,7 +10,7 @@ set -e  # Exit on error
 
 # Configuration
 REPO_URL="https://github.com/dwainm/bellafruita"
-INSTALL_DIR="$HOME/bellafruita"
+INSTALL_DIR="$HOME/packlinefeeder"
 PYTHON_MIN_VERSION="3.9"
 
 # Check for non-interactive mode (env vars set)
@@ -209,9 +209,17 @@ CURRENT_OUTPUT_IP=""
 if [ -f "config.py" ]; then
     # Try to read current config (if file is valid Python)
     if python3 -m py_compile config.py 2>/dev/null; then
-        CURRENT_SITE_NAME=$(grep -oP '^\s*site_name:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
-        CURRENT_INPUT_IP=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[0-9.]+' config.py 2>/dev/null || echo "")
-        CURRENT_OUTPUT_IP=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[0-9.]+' config.py 2>/dev/null || echo "")
+        # Try to extract from Python code directly (works for both simple and dataclass formats)
+        CURRENT_INPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
+        CURRENT_OUTPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
+        CURRENT_SITE_NAME=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.SystemInfo().site_name if hasattr(config, 'SystemInfo') else 'Bella Fruita')" 2>/dev/null || echo "Bella Fruita")
+
+        # Debug: Show what we found
+        if [ -n "$CURRENT_INPUT_IP" ]; then
+            print_info "Found existing config: Input=$CURRENT_INPUT_IP, Output=$CURRENT_OUTPUT_IP"
+        else
+            print_warning "Could not read existing config values"
+        fi
     else
         print_warning "Existing config.py has syntax errors - will be replaced with template"
     fi
@@ -289,21 +297,19 @@ if [ "$SKIP_CONFIG" != "true" ]; then
 
     # Update config.py with sed
     if [ -f "config.py" ]; then
-        # Update site_name, input_ip and output_ip (preserving indentation)
+        # Update input_ip and output_ip in ModbusConfig dataclass (preserving indentation and format)
+        # Matches lines like: input_ip: str = "192.168.1.10" OR input_ip: str = "192.168.1.10" # comment
         if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS sed syntax
-            sed -i '' "s/\(^[[:space:]]*\)site_name: str = \"[^\"]*\"/\1site_name: str = \"$SITE_NAME\"/" config.py
-            sed -i '' "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"/\1input_ip: str = \"$INPUT_IP\"/" config.py
-            sed -i '' "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"/\1output_ip: str = \"$OUTPUT_IP\"/" config.py
+            # macOS sed syntax - update active (non-commented) lines in ModbusConfig
+            sed -i '' "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$INPUT_IP\"\2/" config.py
+            sed -i '' "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
         else
             # Linux sed syntax
-            sed -i "s/\(^[[:space:]]*\)site_name: str = \"[^\"]*\"/\1site_name: str = \"$SITE_NAME\"/" config.py
-            sed -i "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"/\1input_ip: str = \"$INPUT_IP\"/" config.py
-            sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"/\1output_ip: str = \"$OUTPUT_IP\"/" config.py
+            sed -i "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$INPUT_IP\"\2/" config.py
+            sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
         fi
 
         print_success "Configuration updated:"
-        echo "  Site Name:     $SITE_NAME"
         echo "  Input PLC IP:  $INPUT_IP"
         echo "  Output PLC IP: $OUTPUT_IP"
     else
