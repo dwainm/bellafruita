@@ -209,9 +209,9 @@ CURRENT_OUTPUT_IP=""
 if [ -f "config.py" ]; then
     # Try to read current config (if file is valid Python)
     if python3 -m py_compile config.py 2>/dev/null; then
-        CURRENT_SITE_NAME=$(grep -oP "site_name:\s*['\"]?\K[^'\"]*" config.py 2>/dev/null || echo "")
-        CURRENT_INPUT_IP=$(grep -oP "input_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
-        CURRENT_OUTPUT_IP=$(grep -oP "output_ip:\s*['\"]?\K[0-9.]+" config.py 2>/dev/null || echo "")
+        CURRENT_SITE_NAME=$(grep -oP '^\s*site_name:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+        CURRENT_INPUT_IP=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[0-9.]+' config.py 2>/dev/null || echo "")
+        CURRENT_OUTPUT_IP=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[0-9.]+' config.py 2>/dev/null || echo "")
     else
         print_warning "Existing config.py has syntax errors - will be replaced with template"
     fi
