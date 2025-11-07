@@ -28,7 +28,7 @@ The installer will ask you for:
 - Site/Installation name (displayed in TUI)
 - Input PLC IP address
 - Output PLC IP address
-- Auto-start preference (terminal window or background service)
+- Whether to auto-start on login (opens terminal window with TUI)
 
 ### Non-Interactive Mode (Automated Deployment)
 ```bash
@@ -68,7 +68,7 @@ This allows you to monitor the system from any device with a web browser (phone,
 
 ### Auto-Start on Boot (Configured during installation)
 
-#### Linux - Option 1: Terminal Window (Recommended for operator stations)
+#### Linux - Terminal Window Auto-Start
 Opens a terminal window on login with the TUI visible.
 
 **Supported on:**
@@ -85,14 +85,6 @@ rm ~/.config/autostart/bellafruita.desktop
 ```
 
 The installer automatically detects which terminal emulator you have installed.
-
-#### Linux - Option 2: Background Service (For headless servers)
-```bash
-systemctl --user start bellafruita    # Start now
-systemctl --user stop bellafruita     # Stop
-systemctl --user status bellafruita   # Check status
-journalctl --user -u bellafruita -f   # View logs
-```
 
 #### macOS (LaunchAgent)
 Opens a Terminal window on login:
@@ -264,10 +256,6 @@ python main.py
 ## Uninstall
 
 ```bash
-# Stop service (if running)
-systemctl --user stop bellafruita  # Linux
-launchctl stop com.bellafruita.app  # macOS
-
 # Disable auto-start
 rm ~/.config/autostart/bellafruita.desktop  # Linux
 launchctl unload ~/Library/LaunchAgents/com.bellafruita.app.plist  # macOS
