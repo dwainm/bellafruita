@@ -452,13 +452,13 @@ class InitiateMoveBoth(Rule):
         controller.log_manager.info_once(log_msg)
 
 class StartMovingMotor3AfterDelay(Rule):
-    """Start moving both bins simultaneously."""
+    """Start Motor 3 after delay."""
 
     def __init__(self):
-        super().__init__("Initiate Move Both")
+        super().__init__("Start Moving Motor 3 After Delay")
 
     def condition(self, procon, mem):
-        """Check if both bins move should start."""
+        """Check if Motor 3 should start after delay."""
         return (
             mem.mode() == 'MOVING_BOTH' and
             mem.get('Motor3_StartTime') is not None and
