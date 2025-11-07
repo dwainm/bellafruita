@@ -133,12 +133,13 @@ class ReadyRule(Rule):
 
         safety_ok = immediate_ok and trips_stable
 
-        # Only transition to READY from None or ERROR_SAFETY states
+        # Only transition to READY from None, OFF, or ERROR_SAFETY states
         # Don't override MOVING states or other ERROR states (they have explicit reset logic)
         # ERROR_COMMS, ERROR_COMMS_ACK, ERROR_ESTOP require explicit operator reset
         current_mode = mem.mode()
         can_transition = (
             current_mode is None or
+            current_mode == 'OFF' or
             current_mode == 'ERROR_SAFETY'
         )
 
