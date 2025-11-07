@@ -420,20 +420,26 @@ class ModbusTUI(App):
         align: center middle;
     }
 
-    .comms-status-text {
+    .site-name {
         width: auto;
-        text-align: center;
-        margin-left: 2;
+        text-align: left;
+        margin-right: 2;
     }
 
+    .comms-status-text {
+        width: 1fr;
+        text-align: center;
+    }
 
     .heartbeat-label {
         color: $text;
-        margin-left: 1;
+        width: auto;
+        margin-left: 2;
     }
 
     .heartbeat-indicator {
         color: $warning;
+        width: auto;
         text-align: center;
         margin-right: 1;
     }

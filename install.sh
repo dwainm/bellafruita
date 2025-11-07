@@ -289,17 +289,17 @@ if [ "$SKIP_CONFIG" != "true" ]; then
 
     # Update config.py with sed
     if [ -f "config.py" ]; then
-        # Update site_name, input_ip and output_ip
+        # Update site_name, input_ip and output_ip (preserving indentation)
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS sed syntax
-            sed -i '' "s/site_name: \"[^\"]*\"/site_name: \"$SITE_NAME\"/" config.py
-            sed -i '' "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
-            sed -i '' "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
+            sed -i '' "s/\(^[[:space:]]*\)site_name: str = \"[^\"]*\"/\1site_name: str = \"$SITE_NAME\"/" config.py
+            sed -i '' "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"/\1input_ip: str = \"$INPUT_IP\"/" config.py
+            sed -i '' "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"/\1output_ip: str = \"$OUTPUT_IP\"/" config.py
         else
             # Linux sed syntax
-            sed -i "s/site_name: \"[^\"]*\"/site_name: \"$SITE_NAME\"/" config.py
-            sed -i "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
-            sed -i "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
+            sed -i "s/\(^[[:space:]]*\)site_name: str = \"[^\"]*\"/\1site_name: str = \"$SITE_NAME\"/" config.py
+            sed -i "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"/\1input_ip: str = \"$INPUT_IP\"/" config.py
+            sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"/\1output_ip: str = \"$OUTPUT_IP\"/" config.py
         fi
 
         print_success "Configuration updated:"
@@ -507,7 +507,7 @@ if command -v ttyd &> /dev/null; then
         echo "Or from this machine: http://localhost:$TTYD_PORT"
         echo ""
 
-        ttyd -p $TTYD_PORT -t fontSize=14 -t theme='{"background": "#1e1e1e"}' bash -c "cd $(pwd) && source venv/bin/activate && python main.py $*; echo 'Application exited. Press any key to close...'; read -n 1" &
+        ttyd -W -p $TTYD_PORT -t fontSize=14 -t theme='{"background": "#1e1e1e"}' bash -c "cd $(pwd) && source venv/bin/activate && python main.py $*; echo 'Application exited. Press any key to close...'; read -n 1" &
         TTYD_PID=$!
         echo $TTYD_PID > "$PID_FILE"
 
