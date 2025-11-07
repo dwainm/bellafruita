@@ -579,6 +579,7 @@ def setup_rules(rule_engine):
 
     # Both bins operation (C3→C2 and C2→PALM simultaneously)
     rule_engine.add_rule(InitiateMoveBoth())           # Start both bins move on button
+    rule_engine.add_rule(StartMovingMotor3AfterDelay())         # start moving motar 3 after delay
     rule_engine.add_rule(CompleteMoveBoth())           # Complete with 2s delay for MOTOR_2
 
     # =====  EMERGENCY OVERRIDES (ALWAYS EXECUTE LAST) =====
