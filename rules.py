@@ -459,7 +459,7 @@ class StartMovingMotor3AfterDelay(Rule):
     def __init__(self):
         super().__init__("Start Moving Motor 3 After Delay")
 
-    def condition(self, procon, mem):
+    def action(self, controller, procon, mem):
         """Check if Motor 3 should start after delay."""
         motor3_time = mem.get('Motor3_StartTime')
         current_time = time.time()
