@@ -466,7 +466,7 @@ class StartMovingMotor3AfterDelay(Rule):
         mode = mem.mode()
 
         if mode == 'MOVING_BOTH':
-            print(f"Motor3Check: timer={motor3_time}, now={current_time:.3f}, timer_set={motor3_time is not None}, time_elapsed={motor3_time is not None and current_time >= motor3_time}")
+            controller.log_manager.info(f"Motor3Check: timer={motor3_time}, now={current_time:.3f}, timer_set={motor3_time is not None}, time_elapsed={motor3_time is not None and current_time >= motor3_time}")
 
         return (
             mode == 'MOVING_BOTH' and
