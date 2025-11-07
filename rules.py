@@ -426,41 +426,56 @@ class InitiateMoveBoth(Rule):
 
     def action(self, controller, procon, mem):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
-        if not mem.mode().startswith('ERROR_'):
-            # Calculate how long bin has been on C3
-            c3_timer_start = mem.get('C3_Timer')
-            if c3_timer_start:
-                elapsed = time.time() - c3_timer_start
-                # Ensure bin is on C3 for 30 seconds total
-                remaining_delay = max(0, 30.0 - elapsed)
-                log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s (bin on C3 for {elapsed:.1f}s)"
-            else:
-                # Fallback if timer not found (shouldn't happen)
-                elapsed = 0
-                remaining_delay = 30.0
-                controller.log_manager.warning("C3_ReadyTimer not found, using default 30s delay")
-                log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s"
+        mem.set_mode('MOVING_BOTH')
+        # Start MOTOR_2 immediately
+        procon.set('MOTOR_2', True)
 
-            # Start MOTOR_3 with calculated delay
-            def start_motor_3():
-                # Safety check: verify we're still in correct mode before starting motor
-                current_mode = mem.mode()
-                if current_mode == 'MOVING_BOTH' and not mem.mode().startswith('ERROR_'):
-                    # Safe to start motor
-                    procon.set('MOTOR_3', True)
-                    controller.log_manager.info_once(f"MOVING_BOTH: started motor 3 after {remaining_delay:.1f}s delay")
-                else:
-                    # State changed during delay - ensure motor is OFF
-                    procon.set('MOTOR_3', False)
-                    controller.log_manager.warning(f"Motor 3 delayed start cancelled - system in {current_mode} mode (expected MOVING_BOTH)")
+        # Calculate how long bin has been on C3
+        c3_timer_start = mem.get('C3_Timer')
+        if c3_timer_start:
+            elapsed = time.time() - c3_timer_start
+            # Ensure bin is on C3 for 30 seconds total
+            remaining_delay = max(0, 30.0 - elapsed)
+            log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s (bin on C3 for {elapsed:.1f}s)"
+        else:
+            # Fallback if timer not found (shouldn't happen)
+            elapsed = 0
+            remaining_delay = 30.0
+            controller.log_manager.warning("C3_Timer not found, using default 30s delay")
+            log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s"
 
-            Timer(remaining_delay, start_motor_3).start()
+        # Store when Motor 3 should start (PLC-style timer using timestamp)
+        motor3_start_time = time.time() + remaining_delay
+        mem.set('Motor3_StartTime', motor3_start_time)
+        mem.set('Motor3_Delay', remaining_delay)  # Store for logging
 
-            # Start MOTOR_2 immediately
-            procon.set('MOTOR_2', True)
-            mem.set_mode('MOVING_BOTH')
-            controller.log_manager.info_once(log_msg)
+        controller.log_manager.info_once(log_msg)
 
+class StartMovingMotor3AfterDelay(Rule):
+    """Start moving both bins simultaneously."""
+
+    def __init__(self):
+        super().__init__("Initiate Move Both")
+
+    def condition(self, procon, mem):
+        """Check if both bins move should start."""
+        return (
+            mem.mode() == 'MOVING_BOTH' and
+            mem.get('Motor3_StartTime') is not None and
+            time.now() >= mem.get('Motor3_StartTime')
+        )
+
+    def action(self, controller, procon, mem):
+        # Clear timers to avoid starting again.
+        mem.set('Motor3_StartTime', None)
+        # Start MOTOR_2 immediately
+        procon.set('MOTOR_3', True)
+
+        # Calculate how long bin has been on C3
+        remaining_delay = mem.get('Motor3_Delay')
+        log_msg = f"Started MOVING_BOTH - Motor 3 started after {remaining_delay:.1f}s"
+        controller.log_manager.info_once(log_msg)
+        mem.set('Motor3_Delay', None)  # Store for logging
 
 class CompleteMoveBoth(Rule):
     """Complete moving both bins with delayed MOTOR_2 stop."""

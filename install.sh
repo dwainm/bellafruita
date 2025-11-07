@@ -316,14 +316,10 @@ echo ""
 # Setup auto-start on boot
 echo ""
 if [ "$OS" == "linux" ]; then
-    echo "Linux auto-start options:"
-    echo "  1) Terminal window (shows TUI on login)"
-    echo "  2) Background service (headless, logs to journalctl)"
-    echo "  3) No auto-start"
-    read -p "Choose option [1/2/3]: " -n 1 -r < /dev/tty
+    read -p "Would you like to auto-start on login with Terminal window? (y/n) " -n 1 -r < /dev/tty
     echo
 
-    if [[ $REPLY == "1" ]]; then
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         # Desktop autostart - opens terminal with TUI
         AUTOSTART_DIR="$HOME/.config/autostart"
         mkdir -p "$AUTOSTART_DIR"
@@ -371,33 +367,6 @@ EOF
         print_success "Desktop autostart installed"
         print_info "A terminal window will open on login showing the TUI"
         print_info "To disable: rm ~/.config/autostart/bellafruita.desktop"
-
-    elif [[ $REPLY == "2" ]]; then
-        # Systemd service - background
-        SERVICE_FILE="$HOME/.config/systemd/user/bellafruita.service"
-        mkdir -p "$HOME/.config/systemd/user"
-
-        cat > "$SERVICE_FILE" << EOF
-[Unit]
-Description=Bella Fruita Control System
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/venv/bin/python $INSTALL_DIR/main.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=default.target
-EOF
-
-        systemctl --user daemon-reload
-        systemctl --user enable bellafruita.service
-        print_success "Systemd service installed and enabled"
-        print_info "Start with: systemctl --user start bellafruita"
-        print_info "View logs with: journalctl --user -u bellafruita -f"
     else
         print_info "No auto-start configured"
     fi
@@ -585,13 +554,6 @@ if [ "$OS" == "linux" ]; then
         print_info "Desktop autostart enabled:"
         echo "  Terminal window will open on login"
         echo "  To disable: rm ~/.config/autostart/bellafruita.desktop"
-        echo ""
-    elif [ -f "$HOME/.config/systemd/user/bellafruita.service" ]; then
-        print_info "Systemd service commands:"
-        echo "  systemctl --user start bellafruita"
-        echo "  systemctl --user stop bellafruita"
-        echo "  systemctl --user status bellafruita"
-        echo "  journalctl --user -u bellafruita -f"
         echo ""
     fi
 elif [ "$OS" == "macos" ] && [ -f "$HOME/Library/LaunchAgents/com.bellafruita.app.plist" ]; then
