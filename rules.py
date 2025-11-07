@@ -462,7 +462,7 @@ class StartMovingMotor3AfterDelay(Rule):
         return (
             mem.mode() == 'MOVING_BOTH' and
             mem.get('Motor3_StartTime') is not None and
-            time.now() >= mem.get('Motor3_StartTime')
+            time.time() >= mem.get('Motor3_StartTime')
         )
 
     def action(self, controller, procon, mem):
