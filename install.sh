@@ -146,8 +146,15 @@ fi
 if [ "$MODE" == "update" ]; then
     print_info "Pulling latest changes from GitHub..."
 
-    # Check if there are local changes
     cd "$INSTALL_DIR"
+
+    # Backup config.py BEFORE git pull (so we can read it later)
+    if [ -f "config.py" ]; then
+        cp config.py config.py.pre_update
+        print_info "Backed up config.py before update"
+    fi
+
+    # Check if there are local changes
     if ! git diff-index --quiet HEAD --; then
         print_warning "Local changes detected. Stashing them..."
         git stash save "Auto-stash before update $(date '+%Y-%m-%d %H:%M:%S')"
@@ -206,13 +213,23 @@ CURRENT_SITE_NAME=""
 CURRENT_INPUT_IP=""
 CURRENT_OUTPUT_IP=""
 
-if [ -f "config.py" ]; then
+# Read from backup if it exists (created before git pull), otherwise from current config
+CONFIG_TO_READ="config.py"
+if [ -f "config.py.pre_update" ]; then
+    CONFIG_TO_READ="config.py.pre_update"
+    print_info "Reading configuration from pre-update backup"
+fi
+
+if [ -f "$CONFIG_TO_READ" ]; then
     # Try to read current config (if file is valid Python)
-    if python3 -m py_compile config.py 2>/dev/null; then
+    if python3 -m py_compile "$CONFIG_TO_READ" 2>/dev/null; then
+        # Temporarily copy to a readable name for import
+        cp "$CONFIG_TO_READ" config_temp.py
         # Try to extract from Python code directly (works for both simple and dataclass formats)
-        CURRENT_INPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
-        CURRENT_OUTPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
-        CURRENT_SITE_NAME=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.SystemInfo().site_name if hasattr(config, 'SystemInfo') else 'Bella Fruita')" 2>/dev/null || echo "Bella Fruita")
+        CURRENT_INPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config_temp as config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
+        CURRENT_OUTPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config_temp as config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
+        CURRENT_SITE_NAME=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config_temp as config; print(config.SystemInfo().site_name if hasattr(config, 'SystemInfo') else 'Bella Fruita')" 2>/dev/null || echo "Bella Fruita")
+        rm -f config_temp.py config_temp.pyc
 
         # Debug: Show what we found
         if [ -n "$CURRENT_INPUT_IP" ]; then
@@ -221,7 +238,7 @@ if [ -f "config.py" ]; then
             print_warning "Could not read existing config values"
         fi
     else
-        print_warning "Existing config.py has syntax errors - will be replaced with template"
+        print_warning "Existing config has syntax errors - will use defaults"
     fi
 
     if [ "$MODE" == "update" ] && [ -n "$CURRENT_INPUT_IP" ]; then
