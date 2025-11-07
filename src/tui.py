@@ -632,6 +632,9 @@ class ModbusTUI(App):
 
     async def on_mount(self) -> None:
         """Called when app is mounted."""
+        # Track if user is manually scrolling
+        self.user_scrolling = False
+
         # Use config if available, otherwise use defaults
         tui_config = self.config.tui if self.config else None
         log_refresh_rate = tui_config.log_refresh_rate if tui_config else 3.0
@@ -806,10 +809,12 @@ class ModbusTUI(App):
         events = self.controller.log_manager.get_recent_events(count=1000)
         self.event_widget.update_events(events, count=1000)
 
-        # Auto-scroll to top to show newest events
+        # Auto-scroll to top to show newest events (only if user isn't scrolling)
         try:
             event_container = self.query_one("#event-log-container", ScrollableContainer)
-            event_container.scroll_home(animate=False)
+            # Check if user is at the top (within 5 lines)
+            if event_container.scroll_offset.y < 5:
+                event_container.scroll_home(animate=False)
         except Exception:
             pass  # Container not ready yet
 
