@@ -151,22 +151,20 @@ if [ "$MODE" == "update" ]; then
     # Extract and save current config values BEFORE any git operations
     SAVED_INPUT_IP=""
     SAVED_OUTPUT_IP=""
-    SAVED_SITE_NAME=""
     
     if [ -f "config.py" ]; then
         # Create backup of config.py before any git operations
         cp config.py config.py.pre_update
         print_info "Backed up config.py before update"
         
-        # Extract current config values to preserve them
-        if python3 -m py_compile config.py 2>/dev/null; then
-            SAVED_INPUT_IP=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
-            SAVED_OUTPUT_IP=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
-            SAVED_SITE_NAME=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; cfg = config.AppConfig.create_default(); print(cfg.site_name)" 2>/dev/null || echo "")
-            
-            if [ -n "$SAVED_INPUT_IP" ]; then
-                print_info "Saved current config: Input=$SAVED_INPUT_IP, Output=$SAVED_OUTPUT_IP"
-            fi
+        # Extract current config values from file to preserve them
+        SAVED_INPUT_IP=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+        SAVED_OUTPUT_IP=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+        
+        if [ -n "$SAVED_INPUT_IP" ] && [ -n "$SAVED_OUTPUT_IP" ]; then
+            print_info "Saved current config: Input=$SAVED_INPUT_IP, Output=$SAVED_OUTPUT_IP"
+        else
+            print_warning "Could not extract current config values"
         fi
     fi
 
