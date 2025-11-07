@@ -25,7 +25,7 @@ MODBUS_MAP = {
             15: {'label': 'DHLM_Trip_Signal', 'description': 'DHLM Chemtrack Trip Signal'},
         },
         'registers': {
-            # Input module holding registers (if any)
+            # Input holding registers (if any)
         }
     },
     'OUTPUT': {
