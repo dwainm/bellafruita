@@ -428,7 +428,8 @@ class InitiateMoveBoth(Rule):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
         mem.set_mode('MOVING_BOTH')
         # Start MOTOR_2 immediately
-        procon.set('MOTOR_2', True)
+        result = procon.set('MOTOR_2', True)
+        controller.log_manager.info(f"MOTOR_2 write result: {result}")
 
         # Calculate how long bin has been on C3
         c3_timer_start = mem.get('C3_Timer')
@@ -447,6 +448,7 @@ class InitiateMoveBoth(Rule):
         # Store when Motor 3 should start (PLC-style timer using timestamp)
         motor3_start_time = time.time() + remaining_delay
         mem.set('Motor3_StartTime', motor3_start_time)
+        controller.log_manager.info(f"DEBUG: Set Motor3_StartTime to {motor3_start_time}, current time: {time.time()}")
         mem.set('Motor3_Delay', remaining_delay)  # Store for logging
 
         controller.log_manager.info_once(log_msg)
@@ -459,17 +461,25 @@ class StartMovingMotor3AfterDelay(Rule):
 
     def condition(self, procon, mem):
         """Check if Motor 3 should start after delay."""
+        motor3_time = mem.get('Motor3_StartTime')
+        current_time = time.time()
+        mode = mem.mode()
+
+        if mode == 'MOVING_BOTH':
+            print(f"Motor3Check: timer={motor3_time}, now={current_time:.3f}, timer_set={motor3_time is not None}, time_elapsed={motor3_time is not None and current_time >= motor3_time}")
+
         return (
-            mem.mode() == 'MOVING_BOTH' and
-            mem.get('Motor3_StartTime') is not None and
-            time.time() >= mem.get('Motor3_StartTime')
+            mode == 'MOVING_BOTH' and
+            motor3_time is not None and
+            current_time >= motor3_time
         )
 
     def action(self, controller, procon, mem):
         # Clear timers to avoid starting again.
         mem.set('Motor3_StartTime', None)
-        # Start MOTOR_2 immediately
-        procon.set('MOTOR_3', True)
+        # Start MOTOR_3
+        result = procon.set('MOTOR_3', True)
+        controller.log_manager.info(f"MOTOR_3 write result: {result}")
 
         # Calculate how long bin has been on C3
         remaining_delay = mem.get('Motor3_Delay')
@@ -494,6 +504,9 @@ class CompleteMoveBoth(Rule):
         """Stop MOTOR 2 and 3 immediately."""
         procon.set('MOTOR_3', False)
         procon.set('MOTOR_2', False)
+        # Clear Motor3 timer to prevent it from starting after completion
+        mem.set('Motor3_StartTime', None)
+        mem.set('Motor3_Delay', None)
         mem.set_mode('READY')
         controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3, MOTOR_2, returning to READY")
 
