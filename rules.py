@@ -153,6 +153,24 @@ class ReadyRule(Rule):
         controller.log_manager.info("READY: Motors OFF")
 
 
+class ManualModeRule(Rule):
+    """Set mode to OFF when manual mode is selected."""
+
+    def __init__(self):
+        super().__init__("Manual Mode")
+
+    def condition(self, procon, mem):
+        """Check if manual mode is selected."""
+        return procon.get('Manual_Select') and mem.mode() != 'OFF'
+
+    def action(self, controller, procon, mem):
+        """Set mode to OFF and stop motors."""
+        procon.set('MOTOR_2', False)
+        procon.set('MOTOR_3', False)
+        mem.set_mode('OFF')
+        controller.log_manager.info("Manual mode selected - system OFF")
+
+
 class ClearReadyRule(Rule):
     """Clear READY state when conditions are no longer met."""
 
@@ -160,19 +178,11 @@ class ClearReadyRule(Rule):
         super().__init__("Clear Ready State")
 
     def condition(self, procon, mem):
-        """Check if mode should be set to ERROR_SAFETY - overrides any state.
+        """Check if mode should be set to ERROR_SAFETY due to trips.
 
         Uses extended_hold() for trip signals to debounce momentary glitches.
         Trip signals must be FALSE for 1+ seconds before triggering error.
         """
-        # Immediate failures (no debounce needed)
-        immediate_violations = (
-            procon.get('Manual_Select') #or
-        #    mem.mode() == 'ERROR_COMMS' or
-       #     mem.mode() == 'ERROR_ESTOP' or
-        #    not procon.get('E_Stop')  # E_Stop needs immediate response
-       )
-
         # Trip signals with 1-second debounce to filter out blips
         # Only trigger if they've been FALSE (tripped) for 1+ seconds
         trip_violations = (
@@ -181,9 +191,7 @@ class ClearReadyRule(Rule):
             procon.extended_hold('DHLM_Trip_Signal', False, 1.0)
         )
 
-       # safety_violated = immediate_violations or trip_violations
-       # return safety_violated and mem.mode() != 'ERROR_SAFETY'
-        return immediate_violations and trip_violations and mem.mode() != 'ERROR_SAFETY'
+        return trip_violations and mem.mode() != 'ERROR_SAFETY'
 
     def action(self, controller, procon, mem):
         """Set mode to ERROR_SAFETY and stop motors."""
@@ -577,8 +585,9 @@ def setup_rules(rule_engine):
     rule_engine.add_rule(CommsResetRule())             # Reset after acknowledgment (switch ON)
 
     # =====  System Ready State Management =====
+    rule_engine.add_rule(ManualModeRule())             # Set mode='OFF' when manual selected
     rule_engine.add_rule(ReadyRule())                  # Set mode='READY' when conditions met
-    rule_engine.add_rule(ClearReadyRule())             # Set mode='ERROR_SAFETY' when conditions lost
+    rule_engine.add_rule(ClearReadyRule())             # Set mode='ERROR_SAFETY' when trips occur
 
     # =====  C3 Timer Rules=====
     rule_engine.add_rule(C3ReadyTimerStart())
