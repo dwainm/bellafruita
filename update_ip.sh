@@ -54,21 +54,41 @@ echo "Backed up config to config.py.backup"
 # Update config
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
-    sed -i '' "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
-    sed -i '' "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
-    sed -i '' "s/use_mock: .*/use_mock: $USE_MOCK/" config.py
+    sed -i '' "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$INPUT_IP\"\2/" config.py
+    sed -i '' "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
+    sed -i '' "s/\(^[[:space:]]*\)use_mock: bool = .*/\1use_mock: bool = $USE_MOCK/" config.py
 else
     # Linux
-    sed -i "s/input_ip: \"[^\"]*\"/input_ip: \"$INPUT_IP\"/" config.py
-    sed -i "s/output_ip: \"[^\"]*\"/output_ip: \"$OUTPUT_IP\"/" config.py
-    sed -i "s/use_mock: .*/use_mock: $USE_MOCK/" config.py
+    sed -i "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$INPUT_IP\"\2/" config.py
+    sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
+    sed -i "s/\(^[[:space:]]*\)use_mock: bool = .*/\1use_mock: bool = $USE_MOCK/" config.py
 fi
 
+# Verify changes were applied
+VERIFY_INPUT=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+VERIFY_OUTPUT=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+VERIFY_MOCK=$(grep -oP '^\s*use_mock:\s*bool\s*=\s*\K(True|False)' config.py 2>/dev/null || echo "")
+
 echo ""
-echo -e "${GREEN}Configuration updated!${NC}"
-echo "  Input PLC IP:  $INPUT_IP"
-echo "  Output PLC IP: $OUTPUT_IP"
-echo "  Mock Mode:     $USE_MOCK"
+if [ "$VERIFY_INPUT" == "$INPUT_IP" ] && [ "$VERIFY_OUTPUT" == "$OUTPUT_IP" ] && [ "$VERIFY_MOCK" == "$USE_MOCK" ]; then
+    echo -e "${GREEN}Configuration updated!${NC}"
+    echo "  Input PLC IP:  $INPUT_IP"
+    echo "  Output PLC IP: $OUTPUT_IP"
+    echo "  Mock Mode:     $USE_MOCK"
+else
+    echo -e "${YELLOW}Warning: Could not verify all changes were applied${NC}"
+    echo "Current values in config.py:"
+    echo "  Input PLC IP:  $VERIFY_INPUT"
+    echo "  Output PLC IP: $VERIFY_OUTPUT"
+    echo "  Mock Mode:     $VERIFY_MOCK"
+    echo ""
+    echo "Expected values:"
+    echo "  Input PLC IP:  $INPUT_IP"
+    echo "  Output PLC IP: $OUTPUT_IP"
+    echo "  Mock Mode:     $USE_MOCK"
+    echo ""
+    echo "Please verify config.py manually. Backup available at: config.py.backup"
+fi
 echo ""
 echo "Restart the system for changes to take effect:"
 echo "  systemctl --user restart bellafruita  # If running as service"

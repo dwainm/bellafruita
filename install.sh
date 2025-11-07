@@ -10,7 +10,7 @@ set -e  # Exit on error
 
 # Configuration
 REPO_URL="https://github.com/dwainm/bellafruita"
-INSTALL_DIR="$HOME/packlinefeeder"
+INSTALL_DIR="$HOME/bellafruita"
 PYTHON_MIN_VERSION="3.9"
 
 # Check for non-interactive mode (env vars set)
@@ -148,10 +148,26 @@ if [ "$MODE" == "update" ]; then
 
     cd "$INSTALL_DIR"
 
-    # Backup config.py BEFORE git pull (so we can read it later)
+    # Extract and save current config values BEFORE any git operations
+    SAVED_INPUT_IP=""
+    SAVED_OUTPUT_IP=""
+    SAVED_SITE_NAME=""
+    
     if [ -f "config.py" ]; then
+        # Create backup of config.py before any git operations
         cp config.py config.py.pre_update
         print_info "Backed up config.py before update"
+        
+        # Extract current config values to preserve them
+        if python3 -m py_compile config.py 2>/dev/null; then
+            SAVED_INPUT_IP=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
+            SAVED_OUTPUT_IP=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
+            SAVED_SITE_NAME=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; cfg = config.AppConfig.create_default(); print(cfg.site_name)" 2>/dev/null || echo "")
+            
+            if [ -n "$SAVED_INPUT_IP" ]; then
+                print_info "Saved current config: Input=$SAVED_INPUT_IP, Output=$SAVED_OUTPUT_IP"
+            fi
+        fi
     fi
 
     # Check if there are local changes
@@ -163,6 +179,33 @@ if [ "$MODE" == "update" ]; then
     # Pull latest from default branch
     git pull --force
     print_success "Code updated to latest version"
+    
+    # Restore config values if they were saved
+    if [ -n "$SAVED_INPUT_IP" ] && [ -f "config.py" ]; then
+        print_info "Restoring previous configuration values..."
+        
+        # Use the sed replacement logic to restore the saved values
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS sed syntax
+            sed -i '' "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$SAVED_INPUT_IP\"\2/" config.py
+            sed -i '' "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$SAVED_OUTPUT_IP\"\2/" config.py
+        else
+            # Linux sed syntax
+            sed -i "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$SAVED_INPUT_IP\"\2/" config.py
+            sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$SAVED_OUTPUT_IP\"\2/" config.py
+        fi
+        
+        # Verify the changes were applied
+        VERIFY_INPUT=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+        VERIFY_OUTPUT=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+        
+        if [ "$VERIFY_INPUT" == "$SAVED_INPUT_IP" ] && [ "$VERIFY_OUTPUT" == "$SAVED_OUTPUT_IP" ]; then
+            print_success "Configuration values restored successfully"
+        else
+            print_warning "Could not verify config restoration. Please check config.py manually."
+            print_info "Backup available at: config.py.pre_update"
+        fi
+    fi
 
 else
     print_info "Cloning repository from GitHub..."
@@ -326,9 +369,30 @@ if [ "$SKIP_CONFIG" != "true" ]; then
             sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
         fi
 
-        print_success "Configuration updated:"
-        echo "  Input PLC IP:  $INPUT_IP"
-        echo "  Output PLC IP: $OUTPUT_IP"
+        # Verify changes were applied successfully
+        VERIFY_INPUT=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+        VERIFY_OUTPUT=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+        
+        if [ "$VERIFY_INPUT" == "$INPUT_IP" ] && [ "$VERIFY_OUTPUT" == "$OUTPUT_IP" ]; then
+            print_success "Configuration updated:"
+            echo "  Input PLC IP:  $INPUT_IP"
+            echo "  Output PLC IP: $OUTPUT_IP"
+        else
+            print_error "Failed to update config.py automatically"
+            print_warning "Please edit config.py manually and update:"
+            echo "  input_ip: str = \"$INPUT_IP\""
+            echo "  output_ip: str = \"$OUTPUT_IP\""
+            
+            if [ -f "config.py.backup" ]; then
+                print_info "Original config backed up to: config.py.backup"
+            fi
+            
+            # Restore backup if update failed
+            if [ -f "config.py.backup" ]; then
+                cp config.py.backup config.py
+                print_info "Restored config.py from backup"
+            fi
+        fi
     else
         print_warning "config.py not found - please configure manually"
     fi
