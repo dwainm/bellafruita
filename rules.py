@@ -427,9 +427,9 @@ class InitiateMoveBoth(Rule):
     def action(self, controller, procon, mem):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
         mem.set_mode('MOVING_BOTH')
+
         # Start MOTOR_2 immediately
-        result = procon.set('MOTOR_2', True)
-        controller.log_manager.info(f"MOTOR_2 write result: {result}")
+        procon.set('MOTOR_2', True)
 
         # Calculate how long bin has been on C3
         c3_timer_start = mem.get('C3_Timer')
@@ -437,18 +437,21 @@ class InitiateMoveBoth(Rule):
             elapsed = time.time() - c3_timer_start
             # Ensure bin is on C3 for 30 seconds total
             remaining_delay = max(0, 30.0 - elapsed)
-            log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s (bin on C3 for {elapsed:.1f}s)"
+            log_msg = f"MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s (bin on C3 for {elapsed:.1f}s)"
         else:
             # Fallback if timer not found (shouldn't happen)
             elapsed = 0
             remaining_delay = 30.0
             controller.log_manager.warning("C3_Timer not found, using default 30s delay")
-            log_msg = f"Started MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s"
+            log_msg = f"MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s"
 
         # Store when Motor 3 should start (PLC-style timer using timestamp)
         motor3_start_time = time.time() + remaining_delay
         mem.set('Motor3_StartTime', motor3_start_time)
-        controller.log_manager.info(f"DEBUG: Set Motor3_StartTime to {motor3_start_time}, current time: {time.time()}")
+        from datetime import datetime
+        start_time_str = datetime.fromtimestamp(motor3_start_time).strftime('%H:%M:%S.%f')[:-3]
+        current_time_str = datetime.fromtimestamp(time.time()).strftime('%H:%M:%S.%f')[:-3]
+        controller.log_manager.info(f"DEBUG: Set Motor3_StartTime to {start_time_str}, current time: {current_time_str}")
         mem.set('Motor3_Delay', remaining_delay)  # Store for logging
 
         controller.log_manager.info_once(log_msg)
@@ -459,14 +462,19 @@ class StartMovingMotor3AfterDelay(Rule):
     def __init__(self):
         super().__init__("Start Moving Motor 3 After Delay")
 
-    def action(self, controller, procon, mem):
+    def condition(self, procon, mem):
         """Check if Motor 3 should start after delay."""
         motor3_time = mem.get('Motor3_StartTime')
         current_time = time.time()
         mode = mem.mode()
 
         if mode == 'MOVING_BOTH':
-            controller.log_manager.info(f"Motor3Check: timer={motor3_time}, now={current_time:.3f}, timer_set={motor3_time is not None}, time_elapsed={motor3_time is not None and current_time >= motor3_time}")
+            from datetime import datetime
+            timer_str = datetime.fromtimestamp(motor3_time).strftime('%H:%M:%S.%f')[:-3] if motor3_time else 'None'
+            now_str = datetime.fromtimestamp(current_time).strftime('%H:%M:%S.%f')[:-3]
+            controller = procon.controller if hasattr(procon, 'controller') else None
+            if controller:
+                controller.log_manager.info(f"Motor3Check: timer={timer_str}, now={now_str}, timer_set={motor3_time is not None}, time_elapsed={motor3_time is not None and current_time >= motor3_time}")
 
         return (
             mode == 'MOVING_BOTH' and
@@ -507,8 +515,8 @@ class CompleteMoveBoth(Rule):
         # Clear Motor3 timer to prevent it from starting after completion
         mem.set('Motor3_StartTime', None)
         mem.set('Motor3_Delay', None)
-        mem.set_mode('READY')
         controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3, MOTOR_2, returning to READY")
+        mem.set_mode('READY')
 
 
 class EmergencyStopRule(Rule):
