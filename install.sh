@@ -292,20 +292,20 @@ if [ "$SKIP_CONFIG" != "true" ]; then
   # Update config.py with sed
   if [ -f "config.py" ]; then
     # Update input_ip and output_ip in ModbusConfig dataclass (preserving indentation and format)
-    # Matches lines like: input_ip: str = "192.168.1.10" OR input_ip: str = "192.168.1.10" # comment
+    # Only match non-commented lines (not starting with #)
     if [[ "$OSTYPE" == "darwin"* ]]; then
-      # macOS sed syntax - update active (non-commented) lines in ModbusConfig
-      sed -i '' "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$INPUT_IP\"\2/" config.py
-      sed -i '' "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
+      # macOS sed syntax - update FIRST occurrence of active (non-commented) input_ip/output_ip
+      sed -i '' "0,/^\([[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/s//\1input_ip: str = \"$INPUT_IP\"\2/" config.py
+      sed -i '' "0,/^\([[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/s//\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
     else
       # Linux sed syntax
-      sed -i "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$INPUT_IP\"\2/" config.py
-      sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
+      sed -i "0,/^\([[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/s//\1input_ip: str = \"$INPUT_IP\"\2/" config.py
+      sed -i "0,/^\([[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/s//\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
     fi
 
-    # Verify changes were applied successfully
-    VERIFY_INPUT=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
-    VERIFY_OUTPUT=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
+    # Verify changes were applied successfully (using Python for reliable parsing)
+    VERIFY_INPUT=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
+    VERIFY_OUTPUT=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
 
     if [ "$VERIFY_INPUT" == "$INPUT_IP" ] && [ "$VERIFY_OUTPUT" == "$OUTPUT_IP" ]; then
       print_success "Configuration updated:"
