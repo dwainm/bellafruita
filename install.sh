@@ -291,36 +291,53 @@ if [ "$SKIP_CONFIG" != "true" ]; then
 
   # Update config.py using awk (more portable and reliable)
   if [ -f "config.py" ]; then
+    # Update site_name - replace first non-commented occurrence
+    awk -v new_name="$SITE_NAME" '
+      !done && /^[[:space:]]*site_name: str = "/ {
+        if ($0 !~ /^[[:space:]]*#/) {
+          sub(/site_name: str = "[^"]*"/, "site_name: str = \"" new_name "\"")
+          done=1
+        }
+      }
+      {print}
+    ' config.py > config.py.tmp && mv config.py.tmp config.py
+
     # Update input_ip - replace first non-commented occurrence
     awk -v new_ip="$INPUT_IP" '
-      !done && /^[[:space:]]*input_ip: str = "/ && !/^[[:space:]]*#/ {
-        sub(/input_ip: str = "[^"]*"/, "input_ip: str = \"" new_ip "\"")
-        done=1
+      !done && /^[[:space:]]*input_ip: str = "/ {
+        if ($0 !~ /^[[:space:]]*#/) {
+          sub(/input_ip: str = "[^"]*"/, "input_ip: str = \"" new_ip "\"")
+          done=1
+        }
       }
       {print}
     ' config.py > config.py.tmp && mv config.py.tmp config.py
 
     # Update output_ip - replace first non-commented occurrence
     awk -v new_ip="$OUTPUT_IP" '
-      !done && /^[[:space:]]*output_ip: str = "/ && !/^[[:space:]]*#/ {
-        sub(/output_ip: str = "[^"]*"/, "output_ip: str = \"" new_ip "\"")
-        done=1
+      !done && /^[[:space:]]*output_ip: str = "/ {
+        if ($0 !~ /^[[:space:]]*#/) {
+          sub(/output_ip: str = "[^"]*"/, "output_ip: str = \"" new_ip "\"")
+          done=1
+        }
       }
       {print}
     ' config.py > config.py.tmp && mv config.py.tmp config.py
 
     # Verify changes were applied successfully (using Python for reliable parsing)
+    VERIFY_SITE=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.AppConfig.site_name)" 2>/dev/null || echo "")
     VERIFY_INPUT=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
     VERIFY_OUTPUT=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
 
-    if [ "$VERIFY_INPUT" == "$INPUT_IP" ] && [ "$VERIFY_OUTPUT" == "$OUTPUT_IP" ]; then
+    if [ "$VERIFY_SITE" == "$SITE_NAME" ] && [ "$VERIFY_INPUT" == "$INPUT_IP" ] && [ "$VERIFY_OUTPUT" == "$OUTPUT_IP" ]; then
       print_success "Configuration updated:"
+      echo "  Site Name:     $SITE_NAME"
       echo "  Input PLC IP:  $INPUT_IP"
       echo "  Output PLC IP: $OUTPUT_IP"
     else
-      print_error "Comparing $VERIFY_INPUT with $INPUT_IP"
       print_error "Failed to update config.py automatically"
       print_warning "Please edit config.py manually and update:"
+      echo "  site_name: str = \"$SITE_NAME\""
       echo "  input_ip: str = \"$INPUT_IP\""
       echo "  output_ip: str = \"$OUTPUT_IP\""
 
