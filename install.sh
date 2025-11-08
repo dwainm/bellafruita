@@ -289,19 +289,25 @@ if [ "$SKIP_CONFIG" != "true" ]; then
     print_info "Backed up existing config to config.py.backup"
   fi
 
-  # Update config.py with sed
+  # Update config.py using awk (more portable and reliable)
   if [ -f "config.py" ]; then
-    # Update input_ip and output_ip in ModbusConfig dataclass (preserving indentation and format)
-    # Only match non-commented lines (not starting with #)
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      # macOS sed syntax - update FIRST occurrence of active (non-commented) input_ip/output_ip
-      sed -i '' "0,/^\([[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/s//\1input_ip: str = \"$INPUT_IP\"\2/" config.py
-      sed -i '' "0,/^\([[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/s//\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
-    else
-      # Linux sed syntax
-      sed -i "0,/^\([[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/s//\1input_ip: str = \"$INPUT_IP\"\2/" config.py
-      sed -i "0,/^\([[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/s//\1output_ip: str = \"$OUTPUT_IP\"\2/" config.py
-    fi
+    # Update input_ip - replace first non-commented occurrence
+    awk -v new_ip="$INPUT_IP" '
+      !done && /^[[:space:]]*input_ip: str = "/ && !/^[[:space:]]*#/ {
+        sub(/input_ip: str = "[^"]*"/, "input_ip: str = \"" new_ip "\"")
+        done=1
+      }
+      {print}
+    ' config.py > config.py.tmp && mv config.py.tmp config.py
+
+    # Update output_ip - replace first non-commented occurrence
+    awk -v new_ip="$OUTPUT_IP" '
+      !done && /^[[:space:]]*output_ip: str = "/ && !/^[[:space:]]*#/ {
+        sub(/output_ip: str = "[^"]*"/, "output_ip: str = \"" new_ip "\"")
+        done=1
+      }
+      {print}
+    ' config.py > config.py.tmp && mv config.py.tmp config.py
 
     # Verify changes were applied successfully (using Python for reliable parsing)
     VERIFY_INPUT=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
