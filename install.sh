@@ -142,31 +142,31 @@ else
   print_success "ttyd already installed"
 fi
 
+# Save existing config BEFORE any git operations
+SAVED_SITE_NAME=""
+SAVED_INPUT_IP=""
+SAVED_OUTPUT_IP=""
+
+if [ "$MODE" == "update" ] && [ -f "$INSTALL_DIR/config.py" ]; then
+  cd "$INSTALL_DIR"
+  print_info "Reading existing configuration..."
+
+  # Extract values using Python (works with dataclass format)
+  SAVED_INPUT_IP=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
+  SAVED_OUTPUT_IP=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
+  SAVED_SITE_NAME=$(python3 -c "import sys; sys.path.insert(0, '.'); import config; print(config.AppConfig.site_name)" 2>/dev/null || echo "Bella Fruita")
+
+  if [ -n "$SAVED_INPUT_IP" ] && [ -n "$SAVED_OUTPUT_IP" ]; then
+    print_success "Saved config: Site='$SAVED_SITE_NAME', Input=$SAVED_INPUT_IP, Output=$SAVED_OUTPUT_IP"
+  else
+    print_warning "Could not read existing config"
+  fi
+fi
+
 # Install/Update
 if [ "$MODE" == "update" ]; then
   print_info "Pulling latest changes from GitHub..."
-
   cd "$INSTALL_DIR"
-
-  # Extract and save current config values BEFORE any git operations
-  SAVED_INPUT_IP=""
-  SAVED_OUTPUT_IP=""
-
-  if [ -f "config.py" ]; then
-    # Create backup of config.py before any git operations
-    cp config.py config.py.pre_update
-    print_info "Backed up config.py before update"
-
-    # Extract current config values from file to preserve them
-    SAVED_INPUT_IP=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
-    SAVED_OUTPUT_IP=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
-
-    if [ -n "$SAVED_INPUT_IP" ] && [ -n "$SAVED_OUTPUT_IP" ]; then
-      print_info "Saved current config: Input=$SAVED_INPUT_IP, Output=$SAVED_OUTPUT_IP"
-    else
-      print_warning "Could not extract current config values"
-    fi
-  fi
 
   # Check if there are local changes
   if ! git diff-index --quiet HEAD --; then
@@ -177,33 +177,6 @@ if [ "$MODE" == "update" ]; then
   # Pull latest from default branch
   git pull --force
   print_success "Code updated to latest version"
-
-  # Restore config values if they were saved
-  if [ -n "$SAVED_INPUT_IP" ] && [ -f "config.py" ]; then
-    print_info "Restoring previous configuration values..."
-
-    # Use the sed replacement logic to restore the saved values
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      # macOS sed syntax
-      sed -i '' "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$SAVED_INPUT_IP\"\2/" config.py
-      sed -i '' "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$SAVED_OUTPUT_IP\"\2/" config.py
-    else
-      # Linux sed syntax
-      sed -i "s/\(^[[:space:]]*\)input_ip: str = \"[^\"]*\"\(.*\)$/\1input_ip: str = \"$SAVED_INPUT_IP\"\2/" config.py
-      sed -i "s/\(^[[:space:]]*\)output_ip: str = \"[^\"]*\"\(.*\)$/\1output_ip: str = \"$SAVED_OUTPUT_IP\"\2/" config.py
-    fi
-
-    # Verify the changes were applied
-    VERIFY_INPUT=$(grep -oP '^\s*input_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
-    VERIFY_OUTPUT=$(grep -oP '^\s*output_ip:\s*str\s*=\s*"\K[^"]+' config.py 2>/dev/null || echo "")
-
-    if [ "$VERIFY_INPUT" == "$SAVED_INPUT_IP" ] && [ "$VERIFY_OUTPUT" == "$SAVED_OUTPUT_IP" ]; then
-      print_success "Configuration values restored successfully"
-    else
-      print_warning "Could not verify config restoration. Please check config.py manually."
-      print_info "Backup available at: config.py.pre_update"
-    fi
-  fi
 
 else
   print_info "Cloning repository from GitHub..."
@@ -249,72 +222,35 @@ echo ""
 print_info "Configuration Setup"
 echo "================================================"
 
-# Check if config.py exists and try to read current settings
-CURRENT_SITE_NAME=""
-CURRENT_INPUT_IP=""
-CURRENT_OUTPUT_IP=""
+# Use saved config values (from before git pull) or defaults
+CURRENT_SITE_NAME=${SAVED_SITE_NAME:-"Bella Fruita"}
+CURRENT_INPUT_IP=${SAVED_INPUT_IP:-"192.168.1.10"}
+CURRENT_OUTPUT_IP=${SAVED_OUTPUT_IP:-"192.168.1.11"}
 
-# Read from backup if it exists (created before git pull), otherwise from current config
-CONFIG_TO_READ="config.py"
-if [ -f "config.py.pre_update" ]; then
-  CONFIG_TO_READ="config.py.pre_update"
-  print_info "Reading configuration from pre-update backup"
-fi
+# During updates, ask if user wants to keep existing config
+PRESERVE_CONFIG=false
+if [ "$MODE" == "update" ] && [ -n "$SAVED_INPUT_IP" ]; then
+  print_info "Current configuration:"
+  echo "  Site Name:     $CURRENT_SITE_NAME"
+  echo "  Input PLC IP:  $CURRENT_INPUT_IP"
+  echo "  Output PLC IP: $CURRENT_OUTPUT_IP"
+  echo ""
 
-if [ -f "$CONFIG_TO_READ" ]; then
-  # Try to read current config (if file is valid Python)
-  if python3 -m py_compile "$CONFIG_TO_READ" 2>/dev/null; then
-    # Temporarily copy to a readable name for import
-    cp "$CONFIG_TO_READ" config_temp.py
-    # Try to extract from Python code directly (works for both simple and dataclass formats)
-    CURRENT_INPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config_temp as config; print(config.ModbusConfig().input_ip)" 2>/dev/null || echo "")
-    CURRENT_OUTPUT_IP=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config_temp as config; print(config.ModbusConfig().output_ip)" 2>/dev/null || echo "")
-    CURRENT_SITE_NAME=$(cd "$INSTALL_DIR" && python3 -c "import sys; sys.path.insert(0, '.'); import config_temp as config; print(config.SystemInfo().site_name if hasattr(config, 'SystemInfo') else 'Bella Fruita')" 2>/dev/null || echo "Bella Fruita")
-    rm -f config_temp.py config_temp.pyc
-
-    # Debug: Show what we found
-    if [ -n "$CURRENT_INPUT_IP" ]; then
-      print_info "Found existing config: Input=$CURRENT_INPUT_IP, Output=$CURRENT_OUTPUT_IP"
-    else
-      print_warning "Could not read existing config values"
-    fi
-  else
-    print_warning "Existing config has syntax errors - will use defaults"
-  fi
-
-  if [ "$MODE" == "update" ] && [ -n "$CURRENT_INPUT_IP" ]; then
-    # During updates with valid config, ask if user wants to keep or change settings
-    print_info "Current configuration detected:"
-    echo "  Site Name:     $CURRENT_SITE_NAME"
-    echo "  Input PLC IP:  $CURRENT_INPUT_IP"
-    echo "  Output PLC IP: $CURRENT_OUTPUT_IP"
-    echo ""
-
-    if [ "$NON_INTERACTIVE" != "true" ]; then
-      read -p "Keep these settings? (y/n) [y]: " -n 1 -r </dev/tty
-      echo
-      if [[ $REPLY =~ ^[Nn]$ ]]; then
-        # User wants to change settings - don't preserve
-        PRESERVE_CONFIG=false
-      else
-        # User wants to keep settings
-        PRESERVE_CONFIG=true
-        print_info "Keeping existing configuration"
-      fi
-    else
-      # Non-interactive mode - always preserve during updates
+  if [ "$NON_INTERACTIVE" != "true" ]; then
+    read -p "Keep these settings? (y/n) [y]: " -n 1 -r </dev/tty
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
       PRESERVE_CONFIG=true
-      print_info "Keeping existing configuration (non-interactive mode)"
+      print_info "Keeping existing configuration"
+    else
+      PRESERVE_CONFIG=false
     fi
   else
-    PRESERVE_CONFIG=false
+    # Non-interactive mode - always preserve during updates
+    PRESERVE_CONFIG=true
+    print_info "Keeping existing configuration (non-interactive mode)"
   fi
 fi
-
-# Set defaults if no valid config was found
-CURRENT_SITE_NAME=${CURRENT_SITE_NAME:-"Bella Fruita"}
-CURRENT_INPUT_IP=${CURRENT_INPUT_IP:-"192.168.1.10"}
-CURRENT_OUTPUT_IP=${CURRENT_OUTPUT_IP:-"192.168.1.11"}
 
 if [ "$SKIP_CONFIG" != "true" ]; then
   # Use env vars if set (non-interactive mode), otherwise prompt
