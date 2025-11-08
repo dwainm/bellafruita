@@ -397,7 +397,7 @@ if [ "$OS" == "linux" ]; then
       TERMINAL_CMD="lxterminal --command=\"bash -c 'cd $INSTALL_DIR && source venv/bin/activate && python main.py; exec bash'\""
     fi
 
-    AUTOSTART_FILE="$AUTOSTART_DIR/bellafruita.desktop"
+    AUTOSTART_FILE="$AUTOSTART_DIR/packlinefeeder.desktop"
     cat >"$AUTOSTART_FILE" <<EOF
 [Desktop Entry]
 Type=Application
@@ -411,7 +411,7 @@ EOF
 
     print_success "Desktop autostart installed"
     print_info "A terminal window will open on login showing the TUI"
-    print_info "To disable: rm ~/.config/autostart/bellafruita.desktop"
+    print_info "To disable: rm ~/.config/autostart/packlinefeeder.desktop"
   else
     print_info "No auto-start configured"
   fi
@@ -595,10 +595,10 @@ echo "  cd $INSTALL_DIR"
 echo "  ./update_ip.sh"
 echo ""
 if [ "$OS" == "linux" ]; then
-  if [ -f "$HOME/.config/autostart/bellafruita.desktop" ]; then
+  if [ -f "$HOME/.config/autostart/packlinefeeder.desktop" ]; then
     print_info "Desktop autostart enabled:"
     echo "  Terminal window will open on login"
-    echo "  To disable: rm ~/.config/autostart/bellafruita.desktop"
+    echo "  To disable: rm ~/.config/autostart/packlinefeeder.desktop"
     echo ""
   fi
 elif [ "$OS" == "macos" ] && [ -f "$HOME/Library/LaunchAgents/com.bellafruita.app.plist" ]; then
