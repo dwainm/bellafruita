@@ -10,7 +10,7 @@ set -e  # Exit on error
 
 # Configuration
 REPO_URL="https://github.com/dwainm/bellafruita"
-INSTALL_DIR="$HOME/bellafruita"
+INSTALL_DIR="$HOME/packlinefeeder"
 PYTHON_MIN_VERSION="3.9"
 
 # Check for non-interactive mode (env vars set)
