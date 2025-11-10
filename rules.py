@@ -453,6 +453,7 @@ class InitiateMoveBoth(Rule):
             controller.log_manager.warning("C3_Timer not found, using default 30s delay")
             log_msg = f"MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s"
 
+
         # Store when Motor 3 should start (PLC-style timer using timestamp)
         motor3_start_time = time.time() + remaining_delay
         mem.set('Motor3_StartTime', motor3_start_time)
@@ -493,7 +494,13 @@ class StartMovingMotor3AfterDelay(Rule):
     def action(self, controller, procon, mem):
         # Clear timers to avoid starting again.
         mem.set('Motor3_StartTime', None)
+
+        # Safety delay before starting Motor 3
+        controller.log_manager.info("2 second safety delay before starting Motor 3...")
+        time.sleep(2.0)
+
         # Start MOTOR_3
+        controller.log_manager.info("After 2 second safety delay, starting Motor 3")
         result = procon.set('MOTOR_3', True)
         controller.log_manager.info(f"MOTOR_3 write result: {result}")
 
