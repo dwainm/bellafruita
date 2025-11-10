@@ -148,10 +148,9 @@ class ReadyRule(Rule):
     def action(self, controller, procon, mem):
         """Set mode to READY."""
         mem.set_mode('READY')
-        controller.log_manager.info("System is READY")
         procon.set('MOTOR_2', False)
         procon.set('MOTOR_3', False)
-        controller.log_manager.info("READY: Motors OFF")
+        controller.log_manager.info("System is READY and Motors are OFF")
 
 
 class ManualModeRule(Rule):
@@ -360,8 +359,8 @@ class CompleteMoveC3toC2(Rule):
         """Stop both motors and return to READY."""
         procon.set('MOTOR_2', False)
         procon.set('MOTOR_3', False)
+        controller.log_manager.info("Completed MOVING_C3_TO_C2 - both motors stopped")
         mem.set_mode('READY')
-        controller.log_manager.info("Completed MOVING_C3_TO_C2 - both motors stopped, returning to READY")
         # Clear the log_once cache so we can log the next cycle
         controller.log_manager.clear_logged_once(message="Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
 
@@ -524,7 +523,7 @@ class CompleteMoveBoth(Rule):
         # Clear Motor3 timer to prevent it from starting after completion
         mem.set('Motor3_StartTime', None)
         mem.set('Motor3_Delay', None)
-        controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3, MOTOR_2, returning to READY")
+        controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3 and MOTOR_2 stopped.")
         mem.set_mode('READY')
 
 
