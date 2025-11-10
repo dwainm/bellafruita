@@ -119,7 +119,7 @@ class RuleEngine:
             rule: Rule instance to add
         """
         self.rules.append(rule)
-        self.controller.log_manager.info(f"Added rule: {rule.name}")
+        self.controller.log_manager.debug(f"Added rule: {rule.name}")
 
     def evaluate(self, sensor_data: Dict[str, Any]) -> None:
         """Evaluate all rules sequentially (ladder logic style).
@@ -210,7 +210,7 @@ class RuleEngine:
         for rule in self.rules:
             if rule.name == rule_name:
                 rule.enabled = True
-                self.controller.log_manager.info(f"Enabled rule: {rule_name}")
+                self.controller.log_manager.debug(f"Enabled rule: {rule_name}")
                 return
 
     def disable_rule(self, rule_name: str) -> None:
@@ -222,7 +222,7 @@ class RuleEngine:
         for rule in self.rules:
             if rule.name == rule_name:
                 rule.enabled = False
-                self.controller.log_manager.info(f"Disabled rule: {rule_name}")
+                self.controller.log_manager.debug(f"Disabled rule: {rule_name}")
                 return
 
     def get_rule_status(self) -> list[Dict[str, Any]]:

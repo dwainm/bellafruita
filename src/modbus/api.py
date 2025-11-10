@@ -196,7 +196,7 @@ class Procon:
                 # Log timing for MOTOR_2 and MOTOR_3
                 if label.upper() in ['MOTOR_2', 'MOTOR_3'] and self.log_manager:
                     duration_ms = (time.time() - before_time) * 1000
-                    self.log_manager.info(f"{label} write_coil Val:{value}, Result:{result is not None} [{duration_ms:.1f}ms]")
+                    self.log_manager.debug(f"{label} write_coil Val:{value}, Result:{result is not None} [{duration_ms:.1f}ms]")
 
                 # Check if write was successful (result should not be None)
                 return result is not None

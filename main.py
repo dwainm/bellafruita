@@ -1,6 +1,7 @@
 """Main control logic for Bella Fruita apple sorting machine feeder."""
 
 import argparse
+import os
 from config import AppConfig
 from src.modbus import create_modbus_client, Procon, MODBUS_MAP, get_all_labels
 from src.logging_system import LogManager
@@ -31,7 +32,12 @@ class ConveyorController:
             timeout=config.modbus.timeout,
             retries=config.modbus.retries
         )
-        self.log_manager = LogManager(max_entries=config.system.log_stack_size)
+        # Check for debug mode from environment variable
+        debug_mode = os.environ.get('DEBUG', '0') == '1'
+        self.log_manager = LogManager(
+            max_entries=config.system.log_stack_size,
+            debug_mode=debug_mode
+        )
         self.procon = Procon(
             self.input_client,
             self.output_client,
@@ -56,7 +62,7 @@ class ConveyorController:
             self.log_manager.error("Cannot connect to output terminal")
 
         if input_ok and output_ok:
-            self.log_manager.info("Connected to both terminals")
+            self.log_manager.debug("Connected to both terminals")
 
         return input_ok and output_ok
 
@@ -176,7 +182,7 @@ class ConveyorController:
         Returns:
             bool: True if reconnection successful
         """
-        self.log_manager.info("Attempting to reconnect...")
+        self.log_manager.debug("Attempting to reconnect...")
 
         # Close existing connections
         try:
@@ -190,7 +196,7 @@ class ConveyorController:
         output_ok = self.output_client.connect()
 
         if input_ok and output_ok:
-            self.log_manager.info("Reconnection successful")
+            self.log_manager.debug("Reconnection successful")
             self.comms_dead = False
             return True
         else:
@@ -229,7 +235,7 @@ def main():
 
     # Log mode
     mode = "MOCK" if config.use_mock else "LIVE"
-    controller.log_manager.info(f"Starting in {mode} mode")
+    controller.log_manager.debug(f"Starting in {mode} mode")
 
 
     # Create rule engine
@@ -253,7 +259,7 @@ def main():
     try:
         # Start polling thread BEFORE TUI (so data is ready)
         polling_thread.start()
-        controller.log_manager.info("Background polling thread started")
+        controller.log_manager.debug("Background polling thread started")
 
         # Run with TUI (editable in mock mode, read-only in real mode)
         # TUI now just renders state, never blocks on I/O

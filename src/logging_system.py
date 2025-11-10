@@ -39,18 +39,20 @@ class EventEntry:
 class LogManager:
     """Manages log stacks for Modbus devices."""
 
-    def __init__(self, max_entries: int = 3000, log_file: Optional[str] = None):
+    def __init__(self, max_entries: int = 3000, log_file: Optional[str] = None, debug_mode: bool = False):
         """Initialize log manager.
 
         Args:
             max_entries: Maximum number of log entries to keep per device
             log_file: Path to persistent log file (default: logs/system_events.jsonl)
+            debug_mode: Enable debug logging (default: False)
         """
         self.max_entries = max_entries
         self.input_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.output_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.event_logs: deque[EventEntry] = deque(maxlen=max_entries)
         self._logged_once: set[str] = set()  # Track messages logged once
+        self.debug_mode = debug_mode
 
         # Set up log file path
         if log_file is None:
@@ -187,6 +189,11 @@ class LogManager:
     def critical(self, message: str) -> None:
         """Log a critical event."""
         self.log_event("CRITICAL", message)
+
+    def debug(self, message: str) -> None:
+        """Log a debug event (only when debug_mode is enabled)."""
+        if self.debug_mode:
+            self.log_event("DEBUG", message)
 
     def log_once(self, level: str, message: str) -> bool:
         """Log a message only once, preventing duplicates.

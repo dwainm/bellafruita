@@ -653,7 +653,7 @@ class ModbusTUI(App):
         """Attempt to connect to Modbus terminals."""
         # Show connecting message
         self.comms_status_widget.update("[bold cyan]Connecting to Modbus terminals...[/bold cyan]")
-        self.controller.log_manager.info("Connecting to Modbus terminals...")
+        self.controller.log_manager.debug("Connecting to Modbus terminals...")
 
         self.connected = self.controller.connect()
 

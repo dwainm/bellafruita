@@ -80,7 +80,7 @@ class CommsResetRule(Rule):
 
     def action(self, controller, procon, mem):
         """Attempt to clear error by reconnecting to Modbus."""
-        controller.log_manager.info("Attempting to reconnect Modbus clients...")
+        controller.log_manager.debug("Attempting to reconnect Modbus clients...")
 
         # Close old broken connections
         controller.input_client.close()
@@ -91,7 +91,7 @@ class CommsResetRule(Rule):
         output_ok = controller.output_client.connect()
 
         if input_ok and output_ok:
-            controller.log_manager.info("Modbus clients reconnected - checking comms health...")
+            controller.log_manager.debug("Modbus clients reconnected - checking comms health...")
             # Now check if comms are actually healthy
             comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
 
@@ -254,7 +254,7 @@ class C3ReadyTimerStart(Rule):
 
     def action(self, controller, procon, mem):
         mem.set('C3_Timer', time.time())
-        controller.log_manager.info("C3_Timer - Started")
+        controller.log_manager.debug("C3_Timer - Started")
 
 class C3ReadyTimerReset(Rule):
     """Reset C3 timer when S1 is made."""
@@ -270,7 +270,7 @@ class C3ReadyTimerReset(Rule):
 
     def action(self, controller, procon, mem):
         mem.set('C3_Timer', None)
-        controller.log_manager.info("C3_Timer - Reset")
+        controller.log_manager.debug("C3_Timer - Reset")
 
 class CratePositionsSensorLedOn(Rule):
     """Turn on crate position LED when crates aren't positioned correctly."""
@@ -332,7 +332,7 @@ class InitiateMoveC3toC2(Rule):
         from datetime import datetime
         start_time_str = datetime.fromtimestamp(motors_start_time).strftime('%H:%M:%S.%f')[:-3]
         current_time_str = datetime.fromtimestamp(time.time()).strftime('%H:%M:%S.%f')[:-3]
-        controller.log_manager.info(f"DEBUG: Set C3toC2_StartTime to {start_time_str}, current time: {current_time_str}")
+        controller.log_manager.debug(f"Set C3toC2_StartTime to {start_time_str}, current time: {current_time_str}")
         mem.set('C3toC2_Delay', remaining_delay)  # Store for logging
 
         controller.log_manager.info(log_msg)
@@ -496,7 +496,7 @@ class InitiateMoveBoth(Rule):
         from datetime import datetime
         start_time_str = datetime.fromtimestamp(motor3_start_time).strftime('%H:%M:%S.%f')[:-3]
         current_time_str = datetime.fromtimestamp(time.time()).strftime('%H:%M:%S.%f')[:-3]
-        controller.log_manager.info(f"DEBUG: Set Motor3_StartTime to {start_time_str}, current time: {current_time_str}")
+        controller.log_manager.debug(f"Set Motor3_StartTime to {start_time_str}, current time: {current_time_str}")
         mem.set('Motor3_Delay', remaining_delay)  # Store for logging
 
         controller.log_manager.info_once(log_msg)

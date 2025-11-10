@@ -95,7 +95,7 @@ class PollingThread(threading.Thread):
 
     def run(self) -> None:
         """Main polling loop - runs in background thread."""
-        self.controller.log_manager.info("Polling thread started")
+        self.controller.log_manager.debug("Polling thread started")
 
         while not self._stop_event.is_set():
             loop_start = time.time()
@@ -162,4 +162,4 @@ class PollingThread(threading.Thread):
             if sleep_time > 0:
                 self._stop_event.wait(sleep_time)
 
-        self.controller.log_manager.info("Polling thread stopped")
+        self.controller.log_manager.debug("Polling thread stopped")
