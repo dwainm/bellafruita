@@ -319,27 +319,62 @@ class InitiateMoveC3toC2(Rule):
         )
 
     def action(self, controller, procon, mem):
-        """Set mode to MOVING_C3_TO_C2 and schedule motors to start in 30s."""
-        # Immediately transition to MOVING state
+        """Set mode to MOVING_C3_TO_C2 and schedule both motors to start after 30s."""
         mem.set_mode('MOVING_C3_TO_C2')
-        controller.log_manager.info_once("Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
 
-        # Delayed motor start (30 seconds)
-        def start_motors():
-            # Safety check: verify we're still in correct mode before starting motors
-            current_mode = mem.mode()
-            if current_mode == 'MOVING_C3_TO_C2' and not mem.mode().startswith('ERROR_'):
-                # Safe to start motors
-                procon.set('MOTOR_2', True)
-                procon.set('MOTOR_3', True)
-                controller.log_manager.info_once("MOVING_C3_TO_C2: Motors started after 30s delay")
-            else:
-                # State changed during delay - ensure motors are OFF
-                procon.set('MOTOR_2', False)
-                procon.set('MOTOR_3', False)
-                controller.log_manager.warning(f"MOVING_C3_TO_C2 delayed start cancelled - system in {current_mode} mode (expected MOVING_C3_TO_C2)")
+        # For C3_TO_C2, bin just arrived on C3, so always use full 30 second delay
+        remaining_delay = 30.0
+        log_msg = f"MOVING_C3_TO_C2 - Both motors will start in {remaining_delay:.1f}s"
 
-        Timer(30.0, start_motors).start()
+        # Store when motors should start (PLC-style timer using timestamp)
+        motors_start_time = time.time() + remaining_delay
+        mem.set('C3toC2_StartTime', motors_start_time)
+        from datetime import datetime
+        start_time_str = datetime.fromtimestamp(motors_start_time).strftime('%H:%M:%S.%f')[:-3]
+        current_time_str = datetime.fromtimestamp(time.time()).strftime('%H:%M:%S.%f')[:-3]
+        controller.log_manager.info(f"DEBUG: Set C3toC2_StartTime to {start_time_str}, current time: {current_time_str}")
+        mem.set('C3toC2_Delay', remaining_delay)  # Store for logging
+
+        controller.log_manager.info(log_msg)
+
+
+class StartMovingC3toC2AfterDelay(Rule):
+    """Start both motors after 30s delay for C3→C2 move."""
+
+    def __init__(self):
+        super().__init__("Start Moving C3→C2 After Delay")
+
+    def condition(self, procon, mem):
+        """Check if motors should start after delay."""
+        start_time = mem.get('C3toC2_StartTime')
+        current_time = time.time()
+        mode = mem.mode()
+
+        return (
+            mode == 'MOVING_C3_TO_C2' and
+            start_time is not None and
+            current_time >= start_time
+        )
+
+    def action(self, controller, procon, mem):
+        # Clear timers to avoid starting again
+        mem.set('C3toC2_StartTime', None)
+
+        # Start MOTOR_2 first
+        procon.set('MOTOR_2', True)
+
+        # Safety delay between motors
+        time.sleep(2.0)
+
+        # Start MOTOR_3 after delay
+        controller.log_manager.info("Motor 3 started after 2 second delay")
+        procon.set('MOTOR_3', True)
+
+        # Log completion
+        remaining_delay = mem.get('C3toC2_Delay')
+        log_msg = f"Started MOVING_C3_TO_C2 - Motor 2 started, Motor 3 started after 2s safety delay (total delay {remaining_delay:.1f}s)"
+        controller.log_manager.info(log_msg)
+        mem.set('C3toC2_Delay', None)
 
 
 class CompleteMoveC3toC2(Rule):
@@ -359,10 +394,11 @@ class CompleteMoveC3toC2(Rule):
         """Stop both motors and return to READY."""
         procon.set('MOTOR_2', False)
         procon.set('MOTOR_3', False)
+        # Clear C3toC2 timer to prevent motors from starting after completion
+        mem.set('C3toC2_StartTime', None)
+        mem.set('C3toC2_Delay', None)
         controller.log_manager.info("Completed MOVING_C3_TO_C2 - both motors stopped")
         mem.set_mode('READY')
-        # Clear the log_once cache so we can log the next cycle
-        controller.log_manager.clear_logged_once(message="Entering MOVING_C3_TO_C2 - motors will start in 30 seconds")
 
 
 class InitiateMoveC2toPalm(Rule):
@@ -477,14 +513,6 @@ class StartMovingMotor3AfterDelay(Rule):
         current_time = time.time()
         mode = mem.mode()
 
-        if mode == 'MOVING_BOTH':
-            from datetime import datetime
-            timer_str = datetime.fromtimestamp(motor3_time).strftime('%H:%M:%S.%f')[:-3] if motor3_time else 'None'
-            now_str = datetime.fromtimestamp(current_time).strftime('%H:%M:%S.%f')[:-3]
-            controller = procon.controller if hasattr(procon, 'controller') else None
-            if controller:
-                controller.log_manager.info(f"Motor3Check: timer={timer_str}, now={now_str}, timer_set={motor3_time is not None}, time_elapsed={motor3_time is not None and current_time >= motor3_time}")
-
         return (
             mode == 'MOVING_BOTH' and
             motor3_time is not None and
@@ -492,22 +520,22 @@ class StartMovingMotor3AfterDelay(Rule):
         )
 
     def action(self, controller, procon, mem):
+        mode = mem.mode()
+
         # Clear timers to avoid starting again.
         mem.set('Motor3_StartTime', None)
 
         # Safety delay before starting Motor 3
-        controller.log_manager.info("2 second safety delay before starting Motor 3...")
         time.sleep(2.0)
 
         # Start MOTOR_3
-        controller.log_manager.info("After 2 second safety delay, starting Motor 3")
-        result = procon.set('MOTOR_3', True)
-        controller.log_manager.info(f"MOTOR_3 write result: {result}")
+        controller.log_manager.info("Motor 3 started after 2 second delay")
+        procon.set('MOTOR_3', True)
 
         # Calculate how long bin has been on C3
         remaining_delay = mem.get('Motor3_Delay')
-        log_msg = f"Started MOVING_BOTH - Motor 3 started after {remaining_delay:.1f}s"
-        controller.log_manager.info_once(log_msg)
+        log_msg = f"Started {mode} - Motor 3 started after {remaining_delay:.1f}s"
+        controller.log_manager.info(log_msg)
         mem.set('Motor3_Delay', None)  # Store for logging
 
 class CompleteMoveBoth(Rule):
@@ -609,6 +637,7 @@ def setup_rules(rule_engine):
     # =====  State Machine Operations =====
     # C3→C2 operation (single bin from C3 to C2)
     rule_engine.add_rule(InitiateMoveC3toC2())         # Start C3→C2 move with 30s delay
+    rule_engine.add_rule(StartMovingC3toC2AfterDelay()) # Start both motors after 30s delay
     rule_engine.add_rule(CompleteMoveC3toC2())         # Complete when S2 becomes true
 
     # C2→PALM operation (single bin from C2 to PALM)
