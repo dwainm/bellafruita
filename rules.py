@@ -548,7 +548,8 @@ class CompleteMoveBoth(Rule):
         """Check if both bins move is complete."""
         return (
             mem.mode() == 'MOVING_BOTH' and
-            procon.falling_edge('S2')  # Bin left C2
+            procon.falling_edge('S2') and  # Bin arrived at C2
+            procon.rising_edge('S1')  # Bin left C3
         )
 
     def action(self, controller, procon, mem):
