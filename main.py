@@ -117,13 +117,15 @@ class ConveyorController:
         }
 
     def read_and_log_all_inputs(self) -> dict:
-        """Read all 16 inputs and log them.
+        """Read all inputs (coils + registers) and log them.
 
         Returns:
             dict: Dictionary of all input states with labels
         """
-        # Use Procon API to read all input coils - works for both mock and real
-        input_data = self.procon.get_all('input', 'coils')
+        # Use Procon API to read all input coils and registers - works for both mock and real
+        input_data = {}
+        input_data.update(self.procon.get_all('input', 'coils'))
+        input_data.update(self.procon.get_all('input', 'registers'))
 
         # Log the data
         self.log_manager.log_input(input_data)

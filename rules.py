@@ -38,12 +38,33 @@ class CommsHealthCheckRule(Rule):
         """Monitor comms health and set ERROR_COMMS mode if needed."""
         comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
 
-        if not comms_healthy and mem.mode() != 'ERROR_COMMS' and mem.mode() != "ERROR_COMMS_ACK":
+        if not comms_healthy and mem.mode() not in ['ERROR_COMMS', 'ERROR_COMMS_ACK']:
             # Comms have failed - enter ERROR_COMMS mode
             mem.set_mode('ERROR_COMMS')
-            controller.log_manager.critical("Communications FAILED - VERSION=0 for 5+ seconds. Reset required!")
+            controller.log_manager.critical("Communications FAILED - VERSION=0 for 5+ seconds. Disconnecting and attempting reconnection...")
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
+            # Disconnect
+            controller.input_client.close()
+            controller.output_client.close()
+        elif comms_healthy and mem.mode() == 'ERROR_COMMS':
+            # Comms have recovered! Wait for operator to acknowledge by flipping to Manual
+            controller.log_manager.info_once("Communications RESTORED - VERSION heartbeat detected. Flip switch to Manual to acknowledge.")
+            # Clear the reconnection message cache
+            controller.log_manager.clear_logged_once(message="Attempting to reconnect and restore communications...")
+        elif mem.mode() == 'ERROR_COMMS':
+            # In error mode and still unhealthy, keep trying to reconnect
+            controller.log_manager.info_once("Attempting to reconnect and restore communications...")
+
+            # Try to reconnect if not already connected
+            try:
+                input_ok = controller.input_client.connect()
+                output_ok = controller.output_client.connect()
+
+                if input_ok and output_ok:
+                    controller.log_manager.debug("Modbus clients reconnected - monitoring for VERSION heartbeat...")
+            except Exception as e:
+                controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
         if comms_healthy:
             # Turn on comms green light
@@ -55,7 +76,7 @@ class CommsHealthCheckRule(Rule):
 
 
 class CommsAcknowledgeRule(Rule):
-    """Acknowledge comms error when operator turns Auto_Select OFF."""
+    """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
 
     def __init__(self):
         super().__init__("Comms Acknowledge")
@@ -79,32 +100,16 @@ class CommsResetRule(Rule):
         return mem.mode() == 'ERROR_COMMS_ACK' and procon.get('Auto_Select')
 
     def action(self, controller, procon, mem):
-        """Attempt to clear error by reconnecting to Modbus."""
-        controller.log_manager.debug("Attempting to reconnect Modbus clients...")
+        """Clear error and return to READY if comms are healthy, or back to ERROR_COMMS if not."""
+        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
 
-        # Close old broken connections
-        controller.input_client.close()
-        controller.output_client.close()
-
-        # Reconnect
-        input_ok = controller.input_client.connect()
-        output_ok = controller.output_client.connect()
-
-        if input_ok and output_ok:
-            controller.log_manager.debug("Modbus clients reconnected - checking comms health...")
-            # Now check if comms are actually healthy
-            comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
-
-            if comms_healthy:
-                # Success!
-                mem.set_mode(None)
-                controller.log_manager.info("Communications RECONNECTED and RESET")
-                procon.set('LED_GREEN', True)
-                mem.set_mode('READY')
-            else:
-                controller.log_manager.warning("Reconnected but VERSION still 0 - hardware issue?")
+        if comms_healthy:
+            controller.log_manager.info("Communications RESTORED and RESET - returning to READY")
+            mem.set_mode('READY')
         else:
-            controller.log_manager.warning("Failed to reconnect - check network/hardware")
+            controller.log_manager.warning("Cannot reset - VERSION heartbeat still not detected, returning to ERROR_COMMS")
+            # Go back to ERROR_COMMS to continue reconnection attempts
+            mem.set_mode('ERROR_COMMS')
 
 
 class ReadyRule(Rule):
@@ -160,8 +165,13 @@ class ManualModeRule(Rule):
         super().__init__("Manual Mode")
 
     def condition(self, procon, mem):
-        """Check if manual mode is selected."""
-        return procon.get('Manual_Select') and mem.mode() != 'MANUAL'
+        """Check if manual mode is selected.
+
+        Note: ERROR_COMMS_ACK is excluded - it should only transition via CommsResetRule.
+        """
+        return (procon.get('Manual_Select') and
+                mem.mode() != 'MANUAL' and
+                mem.mode() != 'ERROR_COMMS_ACK')
 
     def action(self, controller, procon, mem):
         """Set mode to MANUAL and stop motors."""

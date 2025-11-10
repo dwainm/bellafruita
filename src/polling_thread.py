@@ -21,7 +21,7 @@ class SystemState:
     output_data: Dict[str, Any] = field(default_factory=dict)
 
     # System status
-    comms_failed: bool = False
+    in_error_comms_mode: bool = False
     connected: bool = False
 
     # Rule engine state (copy)
@@ -46,9 +46,9 @@ class SystemState:
         """Update rule engine state (must be called with lock held)."""
         self.rule_state = rule_state.copy()
         self.active_rules = active_rules.copy()
-        # Derive comms_failed from mode
+        # Derive error comms mode from mode
         mode = rule_state.get('_MODE')
-        self.comms_failed = mode in ('ERROR_COMMS', 'ERROR_COMMS_ACK')
+        self.in_error_comms_mode = mode in ('ERROR_COMMS', 'ERROR_COMMS_ACK')
 
     def get_snapshot(self) -> dict:
         """Get a thread-safe snapshot of all state."""
@@ -56,7 +56,7 @@ class SystemState:
             return {
                 'input_data': self.input_data.copy(),
                 'output_data': self.output_data.copy(),
-                'comms_failed': self.comms_failed,
+                'in_error_comms_mode': self.in_error_comms_mode,
                 'connected': self.connected,
                 'rule_state': self.rule_state.copy(),
                 'active_rules': self.active_rules.copy(),
@@ -104,26 +104,31 @@ class PollingThread(threading.Thread):
                 # Check if we should skip reads due to comms failure
                 should_read = True
                 with self.state.lock:
-                    comms_failed = self.state.comms_failed
+                    in_error_comms_mode = self.state.in_error_comms_mode
 
-                if comms_failed:
+                if in_error_comms_mode:
                     # Communications have failed - SKIP all reads until operator acknowledges
                     # Operator must cycle the auto_start switch (off then on) to reset COMMS_FAILED
                     should_read = False
 
                 # Perform blocking I/O (outside the lock!)
-                if should_read:
-                    input_data = self.controller.read_and_log_all_inputs()
-                    output_data = self.controller.read_and_log_all_outputs()
-                else:
-                    # During comms failure, still attempt to read inputs for operator acknowledgment
-                    # (Auto_Select switch cycling). Inputs and outputs are on separate PLCs,
-                    # so inputs might still be readable even if output PLC has failed.
-                    try:
+                # Always wrap in try/except to handle broken connections gracefully
+                try:
+                    if should_read:
                         input_data = self.controller.read_and_log_all_inputs()
-                    except Exception as e:
-                        self.controller.log_manager.error(f"Failed to read inputs during comms failure: {e}")
-                        input_data = {}
+                        output_data = self.controller.read_and_log_all_outputs()
+                    else:
+                        # During comms failure, keep trying to read inputs to detect recovery
+                        # This allows comms health check to see when VERSION heartbeat returns
+                        input_data = self.controller.read_and_log_all_inputs()
+                        output_data = self.controller.read_and_log_all_outputs()
+                except Exception as e:
+                    # Read failed - will keep retrying next cycle
+                    if in_error_comms_mode:
+                        self.controller.log_manager.debug(f"Read failed during ERROR_COMMS (will retry): {e}")
+                    else:
+                        self.controller.log_manager.error(f"Read failed during normal operation: {e}")
+                    input_data = {}
                     output_data = {}
 
                 # ALWAYS evaluate rules, even during comms failure
@@ -134,7 +139,8 @@ class PollingThread(threading.Thread):
 
                 # Update shared state (quick operation with lock)
                 with self.state.lock:
-                    if should_read:
+                    # Update state if we have valid data (even during ERROR_COMMS recovery)
+                    if input_data or output_data:
                         self.state.update_from_poll(input_data, output_data)
 
                     if self.rule_engine:

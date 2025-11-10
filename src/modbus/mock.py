@@ -40,10 +40,12 @@ class MockModbusClient(ModbusInterface):
         self.inputs = {}
         for address, info in MODBUS_MAP['INPUT']['coils'].items():
             # Convert 0-indexed address to 1-indexed for inputs dict
-            # Default to False, but set trip signals and E_Stop to True (normally closed = safe state)
+            # Default to False, but set trip signals, E_Stop, and sensors to True
             default_state = False
             if info['label'] in ['M1_Trip', 'M2_Trip', 'E_Stop', 'DHLM_Trip_Signal']:
-                default_state = True
+                default_state = True  # Safety signals (normally closed = safe state)
+            if info['label'] in ['S1', 'S2']:
+                default_state = True  # Sensors True = no crates present (beam not broken)
 
             self.inputs[address + 1] = {
                 'label': info['label'],

@@ -740,7 +740,7 @@ class ModbusTUI(App):
 
         input_data = snapshot['input_data']
         output_data = snapshot['output_data']
-        comms_failed = snapshot['comms_failed']
+        in_error_comms_mode = snapshot['in_error_comms_mode']
         input_heartbeat = snapshot['input_heartbeat']
         output_heartbeat = snapshot['output_heartbeat']
         rule_state = snapshot['rule_state']
@@ -749,9 +749,10 @@ class ModbusTUI(App):
         mode = rule_state.get('_MODE')
 
         # Determine if comms are actually healthy
-        # Check VERSION register - if it's 0 or missing, comms might be bad
+        # Check VERSION register - if it's 0 or missing, comms are bad
+        # Even in ERROR_COMMS mode, if VERSION comes back, show heartbeat as healthy
         version = output_data.get('VERSION', 0)
-        comms_healthy = (version != 0) and not comms_failed
+        comms_healthy = (version != 0)
 
         # Update comms status with mode
         self.comms_status_widget.set_status(mode, comms_healthy)
@@ -759,12 +760,12 @@ class ModbusTUI(App):
         # Pulse heartbeat indicators if data is fresh (heartbeat changed)
         if input_heartbeat != self.last_input_heartbeat:
             self.last_input_heartbeat = input_heartbeat
-            if not comms_failed:
+            if comms_healthy:
                 self.comms_status_widget.pulse_input()
 
         if output_heartbeat != self.last_output_heartbeat:
             self.last_output_heartbeat = output_heartbeat
-            if not comms_failed:
+            if comms_healthy:
                 self.comms_status_widget.pulse_output()
 
         # Update input widget states
