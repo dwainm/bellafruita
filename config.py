@@ -10,7 +10,7 @@ class ModbusConfig:
     output_ip: str = "172.20.231.49"
     input_slave_id: int = 1
     output_slave_id: int = 1
-    timeout: float = 10.0  # Network timeout in seconds (Modbus operation timeout)
+    timeout: float = 2.0  # Network timeout in seconds (Modbus operation timeout - 100x normal response time)
     retries: int = 0  # Number of retry attempts per operation (0 = fail fast)
 
 
