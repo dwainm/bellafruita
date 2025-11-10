@@ -249,7 +249,8 @@ class C3ReadyTimerStart(Rule):
         """Check if timer should start."""
         return(
             not procon.get('S1') and
-            mem.get('C3_Timer') is None
+            mem.get('C3_Timer') is None and
+            mem.mode() != 'ERROR_ESTOP'  # don't start timer in error mode
         )
 
     def action(self, controller, procon, mem):
@@ -538,12 +539,13 @@ class EmergencyStopRule(Rule):
         return not procon.get('E_Stop')
 
     def action(self, controller, procon, mem):
-        """Stop all motors and set mode to ERROR_ESTOP."""
-        controller.emergency_stop_all_motors()
-        # Clear all memory and set ERROR_ESTOP mode
-        mem.clear()
-        mem.set_mode('ERROR_ESTOP')
-        controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
+        if  mem.mode() != 'ERROR_ESTOP': # Avoid duplicate actions and errors.
+            """Stop all motors and set mode to ERROR_ESTOP."""
+            controller.emergency_stop_all_motors()
+            # Clear all memory and set ERROR_ESTOP mode
+            mem.clear()
+            mem.set_mode('ERROR_ESTOP')
+            controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
 
 class EmergencyStopResetRule(Rule):
     """Reset ERROR_ESTOP when operator cycles Auto_Select and E_Stop is released."""
