@@ -558,7 +558,7 @@ class EmergencyStopResetRule(Rule):
         return (
             mem.mode() == 'ERROR_ESTOP' and
             procon.get('E_Stop') and  # E_Stop must be released
-            procon.falling_edge('Auto_Select')  # Detect switch to manual (reset position)
+            procon.get('Manual_Select')  # Detect switch to manual (reset position)
         )
 
     def action(self, controller, procon, mem):
