@@ -353,8 +353,10 @@ class Procon:
             return False
 
         # Check if we have data covering the entire hold period
+        # Allow a small tolerance (10% of hold time) for timing precision
         oldest_timestamp = values_in_window[-1][0]
-        if oldest_timestamp > cutoff_time:
+        tolerance = hold_seconds * 0.1
+        if oldest_timestamp > (cutoff_time + tolerance):
             # Not enough history - can't confirm hold
             return False
 
