@@ -139,7 +139,7 @@ class ReadyRule(Rule):
         current_mode = mem.mode()
         can_transition = (
             current_mode is None or
-            current_mode == 'OFF' or
+            current_mode == 'MANUAL' or
             current_mode == 'ERROR_SAFETY'
         )
 
@@ -155,21 +155,20 @@ class ReadyRule(Rule):
 
 
 class ManualModeRule(Rule):
-    """Set mode to OFF when manual mode is selected."""
+    """Set mode to MANUAL when manual mode is selected."""
 
     def __init__(self):
         super().__init__("Manual Mode")
 
     def condition(self, procon, mem):
         """Check if manual mode is selected."""
-        return procon.get('Manual_Select') and mem.mode() != 'OFF'
+        return procon.get('Manual_Select') and mem.mode() != 'MANUAL'
 
     def action(self, controller, procon, mem):
-        """Set mode to OFF and stop motors."""
+        """Set mode to MANUAL and stop motors."""
         procon.set('MOTOR_2', False)
         procon.set('MOTOR_3', False)
-        mem.set_mode('OFF')
-        controller.log_manager.info("Manual mode selected - system OFF")
+        mem.set_mode('MANUAL')
 
 
 class ClearReadyRule(Rule):
