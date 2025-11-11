@@ -415,7 +415,34 @@ if [ "$OS" == "linux" ]; then
     AUTOSTART_DIR="$HOME/.config/autostart"
     mkdir -p "$AUTOSTART_DIR"
 
-    # Use start.sh which includes ttyd support
+    # Detect available terminal emulator and use start.sh
+    TERMINAL_CMD=""
+    if command -v lxterminal &>/dev/null; then
+      # Raspberry Pi OS / LXDE default
+      TERMINAL_CMD="lxterminal --command=\"bash -c 'cd $INSTALL_DIR && ./start.sh; exec bash'\""
+      print_info "Detected: lxterminal (Raspberry Pi OS)"
+    elif command -v x-terminal-emulator &>/dev/null; then
+      # Debian default alternative
+      TERMINAL_CMD="x-terminal-emulator -e bash -c 'cd $INSTALL_DIR && ./start.sh; exec bash'"
+      print_info "Detected: x-terminal-emulator"
+    elif command -v gnome-terminal &>/dev/null; then
+      # GNOME
+      TERMINAL_CMD="gnome-terminal -- bash -c 'cd $INSTALL_DIR && ./start.sh; exec bash'"
+      print_info "Detected: gnome-terminal"
+    elif command -v xfce4-terminal &>/dev/null; then
+      # XFCE
+      TERMINAL_CMD="xfce4-terminal -e \"bash -c 'cd $INSTALL_DIR && ./start.sh; exec bash'\""
+      print_info "Detected: xfce4-terminal"
+    elif command -v mate-terminal &>/dev/null; then
+      # MATE
+      TERMINAL_CMD="mate-terminal -e \"bash -c 'cd $INSTALL_DIR && ./start.sh; exec bash'\""
+      print_info "Detected: mate-terminal"
+    else
+      print_error "No supported terminal emulator found"
+      print_warning "Please install lxterminal: sudo apt-get install lxterminal"
+      TERMINAL_CMD="lxterminal --command=\"bash -c 'cd $INSTALL_DIR && ./start.sh; exec bash'\""
+    fi
+
     print_info "Autostart will use start.sh (includes ttyd remote viewing)"
 
     AUTOSTART_FILE="$AUTOSTART_DIR/packlinefeeder.desktop"
@@ -424,7 +451,7 @@ if [ "$OS" == "linux" ]; then
 Type=Application
 Name=Bella Fruita Control System
 Comment=Apple sorting machine control system
-Exec=bash -c 'cd $INSTALL_DIR && ./start.sh'
+Exec=$TERMINAL_CMD
 Terminal=false
 StartupNotify=false
 X-GNOME-Autostart-enabled=true
