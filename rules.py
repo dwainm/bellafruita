@@ -66,11 +66,16 @@ class CommsHealthCheckRule(Rule):
             except Exception as e:
                 controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
-        # Update LED_GREEN based on comms health - only write when state changes
+        # Update LED_GREEN based on comms health and mode - only write when state changes
+        # LED should be OFF if in error comms modes, ON if comms healthy and in normal mode
+        current_mode = mem.mode()
+        in_error_mode = current_mode in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
+        led_should_be_on = comms_healthy and not in_error_mode
+
         last_led_state = mem.get('_LED_GREEN_STATE')
-        if comms_healthy != last_led_state:
-            procon.set('LED_GREEN', comms_healthy)
-            mem.set('_LED_GREEN_STATE', comms_healthy)
+        if led_should_be_on != last_led_state:
+            procon.set('LED_GREEN', led_should_be_on)
+            mem.set('_LED_GREEN_STATE', led_should_be_on)
 
 
 class CommsAcknowledgeRule(Rule):
