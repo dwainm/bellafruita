@@ -348,8 +348,11 @@ class CratePositionsSensorLedOn(Rule):
         )
 
     def action(self, controller, procon, mem):
-        """Turn on red LED."""
-        # procon.set('LED_RED', True)
+        """Turn on red LED - only write if not already on."""
+        led_red_on = mem.get('_LED_RED_ON')
+        if not led_red_on:
+            procon.set('LED_RED', True)
+            mem.set('_LED_RED_ON', True)
 
 class CratePositionsSensorLedOff(Rule):
     """Turn off crate position LED when crates are positioned correctly."""
@@ -364,8 +367,11 @@ class CratePositionsSensorLedOff(Rule):
         )
 
     def action(self, controller, procon, mem):
-        """Turn off red LED."""
-        # procon.set('LED_RED', False)
+        """Turn off red LED - only write if not already off."""
+        led_red_on = mem.get('_LED_RED_ON')
+        if led_red_on:
+            procon.set('LED_RED', False)
+            mem.set('_LED_RED_ON', False)
 
 class InitiateMoveC3toC2(Rule):
     """Start C3→C2 move: single bin from C3 to C2 after 30s delay."""
