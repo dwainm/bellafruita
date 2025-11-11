@@ -66,25 +66,17 @@ class CommsHealthCheckRule(Rule):
             except Exception as e:
                 controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
-        # Update LED only when comms state changes (prevents flickering)
-        led_state = mem.get('_LED_STATE')
+        # Update LED based on comms health, only write when state needs to change
+        # Read current LED state from hardware
+        current_led = procon.get('LED_GREEN')
 
-        # Turn LED on if not set and comms healthy
-        if led_state is None and comms_healthy:
-            if procon.set('LED_GREEN', True):
-                mem.set('_LED_STATE', True)
-        # Turn LED off if not set and comms unhealthy
-        elif led_state is None and not comms_healthy:
-            if procon.set('LED_GREEN', False):
-                mem.set('_LED_STATE', False)
-        # Turn LED on if was off and comms now healthy
-        elif led_state is False and comms_healthy:
-            if procon.set('LED_GREEN', True):
-                mem.set('_LED_STATE', True)
-        # Turn LED off if was on and comms now unhealthy
-        elif led_state is True and not comms_healthy:
-            if procon.set('LED_GREEN', False):
-                mem.set('_LED_STATE', False)
+        # LED should match comms health
+        if comms_healthy and not current_led:
+            # Need to turn LED on
+            procon.set('LED_GREEN', True)
+        elif not comms_healthy and current_led:
+            # Need to turn LED off
+            procon.set('LED_GREEN', False)
 
 class CommsAcknowledgeRule(Rule):
     """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
