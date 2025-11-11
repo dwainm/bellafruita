@@ -66,12 +66,10 @@ class CommsHealthCheckRule(Rule):
             except Exception as e:
                 controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
-        # Update LED based on comms health - only write if wrong for 1+ second
-        if comms_healthy and procon.extended_hold('LED_GREEN', False, 1.0):
-            controller.log_manager.debug("LED_GREEN has been OFF for 1s, turning ON (comms healthy)")
+        # Update LED based on comms health
+        if comms_healthy:
             procon.set('LED_GREEN', True)
-        elif not comms_healthy and procon.extended_hold('LED_GREEN', True, 1.0):
-            controller.log_manager.debug("LED_GREEN has been ON for 1s, turning OFF (comms unhealthy)")
+        else:
             procon.set('LED_GREEN', False)
 
 class CommsAcknowledgeRule(Rule):
