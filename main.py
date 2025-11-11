@@ -71,51 +71,6 @@ class ConveyorController:
         self.input_client.close()
         self.output_client.close()
 
-    def motor_one_on(self) -> bool:
-        """Turn motor one on.
-
-        Returns:
-            bool: True if successful
-        """
-        return self.procon.set('output', 'motor_1', True)
-
-    def motor_one_off(self) -> bool:
-        """Turn motor one off.
-
-        Returns:
-            bool: True if successful
-        """
-        return self.procon.set('output', 'motor_1', False)
-
-    def sensor1_broken(self) -> bool:
-        """Check if sensor 1 is broken (beam interrupted).
-
-        Returns:
-            bool: True if sensor beam is broken
-        """
-        result = self.procon.get('input', 's1')
-        return result if result is not None else False
-
-    def comms_check(self) -> bool:
-        """Check communication with output terminal.
-
-        Returns:
-            bool: True if communication OK
-        """
-        result = self.procon.get('output', 'version')
-        return result is not None and result != 0
-
-    def read_sensor_state(self) -> dict:
-        """Read current sensor state.
-
-        Returns:
-            dict: Sensor state data
-        """
-        return {
-            "sensor1_broken": self.sensor1_broken(),
-            "comms_ok": self.comms_check()
-        }
-
     def read_and_log_all_inputs(self) -> dict:
         """Read all inputs (coils + registers) and log them.
 
@@ -172,7 +127,7 @@ class ConveyorController:
         """Emergency stop - write False to all output coils."""
         try:
             # Stop all motors using Procon API
-            for motor in ['MOTOR_1', 'MOTOR_2', 'MOTOR_3']:
+            for motor in ['MOTOR_2', 'MOTOR_3']:
                 self.procon.set('output', motor, False)
             self.log_manager.info("All motors stopped")
         except Exception as e:
@@ -275,7 +230,8 @@ def main():
 
     except KeyboardInterrupt:
         controller.log_manager.info("Shutting down")
-        controller.motor_one_off()
+        # Turn off comms LED
+        controller.procon.set('LED_GREEN', False)
     finally:
         # Stop polling thread
         controller.log_manager.info("Stopping polling thread...")

@@ -725,6 +725,12 @@ class ModbusTUI(App):
             except ValueError:
                 pass
 
+    def action_quit(self) -> None:
+        """Override quit action to turn off comms LED before exiting."""
+        # Turn off comms LED
+        self.controller.procon.set('LED_GREEN', False)
+        # Call parent quit action
+        self.exit()
 
     def render_state(self) -> None:
         """Render UI from shared state - NEVER BLOCKS!
