@@ -66,66 +66,11 @@ class CommsHealthCheckRule(Rule):
             except Exception as e:
                 controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
-
-class LEDOffInErrorRule(Rule):
-    """Turn LED off when in ERROR_COMMS or ERROR_COMMS_ACK modes."""
-
-    def __init__(self):
-        super().__init__("LED Off in Error")
-
-    def condition(self, procon, mem):
-        return mem.mode() in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
-
-    def action(self, controller, procon, mem):
-        """Turn LED off in error modes and clear timer."""
-        led_was_on = mem.get('_LED_ON')
-        # Only write if LED was on
-        if led_was_on:
-            procon.set('LED_GREEN', False)
-            mem.set('_LED_ON', False)
-            controller.log_manager.debug("LED turned OFF (error mode)")
-        mem.set('_LED_TIMER', None)
-        mem.set('_LED_COMMS_HEALTH', False)
-
-
-class LEDOnInReadyRule(Rule):
-    """Update LED based on comms health every 5 seconds."""
-
-    def __init__(self):
-        super().__init__("LED Update Based on Comms")
-
-    def condition(self, procon, mem):
-        # Always run to check timer
-        return True
-
-    def action(self, controller, procon, mem):
-        """Update LED based on comms health every 5 seconds."""
-        led_timer = mem.get('_LED_TIMER')
-        current_time = time.time()
-
-        # Check comms health
-        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
-        last_comms_health = mem.get('_LED_COMMS_HEALTH')
-
-        # Initialize on first run
-        if led_timer is None:
+        # Update LED_GREEN based on comms health - only write when state changes
+        last_led_state = mem.get('_LED_GREEN_STATE')
+        if comms_healthy != last_led_state:
             procon.set('LED_GREEN', comms_healthy)
-            mem.set('_LED_TIMER', current_time)
-            mem.set('_LED_ON', comms_healthy)
-            mem.set('_LED_COMMS_HEALTH', comms_healthy)
-            controller.log_manager.debug(f"LED initialized to {'ON' if comms_healthy else 'OFF'} (comms_healthy={comms_healthy})")
-            return
-
-        # Check if 5 seconds have elapsed
-        if (current_time - led_timer) >= 5.0:
-            # Only write if comms health changed
-            if comms_healthy != last_comms_health:
-                procon.set('LED_GREEN', comms_healthy)
-                mem.set('_LED_ON', comms_healthy)
-                mem.set('_LED_COMMS_HEALTH', comms_healthy)
-                controller.log_manager.debug(f"LED changed to {'ON' if comms_healthy else 'OFF'} (comms_healthy={comms_healthy})")
-            # Reset timer regardless
-            mem.set('_LED_TIMER', current_time)
+            mem.set('_LED_GREEN_STATE', comms_healthy)
 
 
 class CommsAcknowledgeRule(Rule):
@@ -698,10 +643,6 @@ def setup_rules(rule_engine):
     rule_engine.add_rule(ManualModeRule())             # Set mode='OFF' when manual selected
     rule_engine.add_rule(ReadyRule())                  # Set mode='READY' when conditions met
     rule_engine.add_rule(ClearReadyRule())             # Set mode='ERROR_SAFETY' when trips occur
-
-    # =====  LED Control =====
-    rule_engine.add_rule(LEDOffInErrorRule())          # Turn LED off in error modes
-    rule_engine.add_rule(LEDOnInReadyRule())           # Turn LED on in ready mode
 
     # =====  C3 Timer Rules=====
     rule_engine.add_rule(C3ReadyTimerStart())
