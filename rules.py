@@ -74,14 +74,18 @@ class LEDOffInErrorRule(Rule):
         super().__init__("LED Off in Error")
 
     def condition(self, procon, mem):
-        return False
-        # return mem.mode() in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
+        return mem.mode() in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
 
     def action(self, controller, procon, mem):
         """Turn LED off in error modes and clear timer."""
-        procon.set('LED_GREEN', False)
-        mem.set('_LED_ON', False)
+        led_was_on = mem.get('_LED_ON')
+        # Only write if LED was on
+        if led_was_on:
+            procon.set('LED_GREEN', False)
+            mem.set('_LED_ON', False)
+            controller.log_manager.debug("LED turned OFF (error mode)")
         mem.set('_LED_TIMER', None)
+        mem.set('_LED_COMMS_HEALTH', False)
 
 
 class LEDOnInReadyRule(Rule):
