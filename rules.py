@@ -66,19 +66,37 @@ class CommsHealthCheckRule(Rule):
             except Exception as e:
                 controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
-        # Update LED based on comms health - only check/write every 5 seconds
-        led_timer = mem.get('_LED_CHECK_TIMER')
-        current_time = time.time()
 
-        # Check if timer expired or not set (first run)
-        if led_timer is None or (current_time - led_timer) >= 5.0:
-            # Timer expired - update LED
-            if comms_healthy:
-                procon.set('LED_GREEN', True)
-            else:
-                procon.set('LED_GREEN', False)
-            # Reset timer
-            mem.set('_LED_CHECK_TIMER', current_time)
+class LEDOffInErrorRule(Rule):
+    """Turn LED off when in ERROR_COMMS or ERROR_COMMS_ACK modes."""
+
+    def __init__(self):
+        super().__init__("LED Off in Error")
+
+    def condition(self, procon, mem):
+        return mem.mode() in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
+
+    def action(self, controller, procon, mem):
+        """Turn LED off in error modes."""
+        procon.set('LED_GREEN', False)
+        mem.set('_LED_ON', False)
+
+
+class LEDOnInReadyRule(Rule):
+    """Turn LED on when in READY mode (if not already on)."""
+
+    def __init__(self):
+        super().__init__("LED On in Ready")
+
+    def condition(self, procon, mem):
+        led_already_on = mem.get('_LED_ON')
+        return mem.mode() == 'READY' and not led_already_on
+
+    def action(self, controller, procon, mem):
+        """Turn LED on in ready mode."""
+        procon.set('LED_GREEN', True)
+        mem.set('_LED_ON', True)
+
 
 class CommsAcknowledgeRule(Rule):
     """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
@@ -644,6 +662,10 @@ def setup_rules(rule_engine):
     rule_engine.add_rule(ManualModeRule())             # Set mode='OFF' when manual selected
     rule_engine.add_rule(ReadyRule())                  # Set mode='READY' when conditions met
     rule_engine.add_rule(ClearReadyRule())             # Set mode='ERROR_SAFETY' when trips occur
+
+    # =====  LED Control =====
+    rule_engine.add_rule(LEDOffInErrorRule())          # Turn LED off in error modes
+    rule_engine.add_rule(LEDOnInReadyRule())           # Turn LED on in ready mode
 
     # =====  C3 Timer Rules=====
     rule_engine.add_rule(C3ReadyTimerStart())
