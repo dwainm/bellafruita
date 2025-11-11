@@ -455,7 +455,7 @@ class ModbusTUI(App):
 
     #event-log-container {
         height: auto;
-        max-height: 30;
+        max-height: 60;
         border: solid $warning;
         padding: 1;
         margin-bottom: 1;
