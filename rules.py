@@ -85,36 +85,38 @@ class LEDOffInErrorRule(Rule):
 
 
 class LEDOnInReadyRule(Rule):
-    """Blink LED on/off every 10 seconds when in READY mode."""
+    """Update LED based on comms health every 5 seconds."""
 
     def __init__(self):
-        super().__init__("LED Blink in Ready")
+        super().__init__("LED Update Based on Comms")
 
     def condition(self, procon, mem):
-        return mem.mode() == 'READY'
+        # Always run to check timer
+        return True
 
     def action(self, controller, procon, mem):
-        """Blink LED every 10 seconds."""
+        """Update LED based on comms health every 5 seconds."""
         led_timer = mem.get('_LED_TIMER')
-        led_on = mem.get('_LED_ON')
         current_time = time.time()
 
-        # Initialize on first run in READY mode
+        # Check comms health
+        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+
+        # Initialize on first run
         if led_timer is None:
-            procon.set('LED_GREEN', True)
+            procon.set('LED_GREEN', comms_healthy)
             mem.set('_LED_TIMER', current_time)
-            mem.set('_LED_ON', True)
-            controller.log_manager.debug("LED initialized ON")
+            mem.set('_LED_ON', comms_healthy)
+            controller.log_manager.debug(f"LED initialized to {'ON' if comms_healthy else 'OFF'} (comms_healthy={comms_healthy})")
             return
 
-        # Check if 10 seconds have elapsed
-        if (current_time - led_timer) >= 10.0:
-            # Toggle LED state
-            new_state = not led_on
-            procon.set('LED_GREEN', new_state)
+        # Check if 5 seconds have elapsed
+        if (current_time - led_timer) >= 5.0:
+            # Update LED based on comms health
+            procon.set('LED_GREEN', comms_healthy)
             mem.set('_LED_TIMER', current_time)
-            mem.set('_LED_ON', new_state)
-            controller.log_manager.debug(f"LED toggled to {'ON' if new_state else 'OFF'}")
+            mem.set('_LED_ON', comms_healthy)
+            controller.log_manager.debug(f"LED set to {'ON' if comms_healthy else 'OFF'} (comms_healthy={comms_healthy})")
 
 
 class CommsAcknowledgeRule(Rule):
