@@ -574,14 +574,18 @@ class CompleteMoveBoth(Rule):
 
 
 class EmergencyStopRule(Rule):
-    """Emergency stop all motors when E_Stop is pressed."""
+    """Emergency stop all motors when E_Stop is pressed and held."""
 
     def __init__(self):
         super().__init__("Emergency Stop")
 
     def condition(self, procon, mem):
-        """Check if emergency stop button is pressed."""
-        return not procon.get('E_Stop')
+        """Check if emergency stop button is pressed and held for 1 second.
+
+        Uses extended_hold to debounce momentary glitches and require
+        a sustained E-Stop signal before triggering emergency shutdown.
+        """
+        return procon.extended_hold('E_Stop', False, 1.0)
 
     def action(self, controller, procon, mem):
         if  mem.mode() != 'ERROR_ESTOP': # Avoid duplicate actions and errors.
