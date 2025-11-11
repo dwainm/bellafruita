@@ -108,7 +108,7 @@ class LEDOnInReadyRule(Rule):
             return
 
         # Check if 10 seconds have elapsed
-        if (current_time - led_timer) >= 5.0:
+        if (current_time - led_timer) >= 10.0:
             # Toggle LED state
             new_state = not led_on
             procon.set('LED_GREEN', new_state)
