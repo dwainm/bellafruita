@@ -101,22 +101,27 @@ class LEDOnInReadyRule(Rule):
 
         # Check comms health
         comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+        last_comms_health = mem.get('_LED_COMMS_HEALTH')
 
         # Initialize on first run
         if led_timer is None:
             procon.set('LED_GREEN', comms_healthy)
             mem.set('_LED_TIMER', current_time)
             mem.set('_LED_ON', comms_healthy)
+            mem.set('_LED_COMMS_HEALTH', comms_healthy)
             controller.log_manager.debug(f"LED initialized to {'ON' if comms_healthy else 'OFF'} (comms_healthy={comms_healthy})")
             return
 
         # Check if 5 seconds have elapsed
         if (current_time - led_timer) >= 5.0:
-            # Update LED based on comms health
-            procon.set('LED_GREEN', comms_healthy)
+            # Only write if comms health changed
+            if comms_healthy != last_comms_health:
+                procon.set('LED_GREEN', comms_healthy)
+                mem.set('_LED_ON', comms_healthy)
+                mem.set('_LED_COMMS_HEALTH', comms_healthy)
+                controller.log_manager.debug(f"LED changed to {'ON' if comms_healthy else 'OFF'} (comms_healthy={comms_healthy})")
+            # Reset timer regardless
             mem.set('_LED_TIMER', current_time)
-            mem.set('_LED_ON', comms_healthy)
-            controller.log_manager.debug(f"LED set to {'ON' if comms_healthy else 'OFF'} (comms_healthy={comms_healthy})")
 
 
 class CommsAcknowledgeRule(Rule):
