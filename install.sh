@@ -101,7 +101,7 @@ fi
 # Check/Install ttyd for remote terminal viewing
 print_info "Checking ttyd for remote terminal access..."
 if ! command -v ttyd &>/dev/null; then
-  print_warning "ttyd not found - installing for remote UI access..."
+  print_warning "ttyd not found - attempting to install for remote UI access..."
 
   if [ "$OS" == "linux" ]; then
     # Try to install ttyd on Linux
@@ -109,26 +109,43 @@ if ! command -v ttyd &>/dev/null; then
       # Debian/Ubuntu/Raspberry Pi OS
       print_info "Installing ttyd via apt..."
       if sudo -n true 2>/dev/null; then
+        # User has passwordless sudo
+        print_info "Updating package list..."
         sudo apt-get update >/dev/null 2>&1
-        sudo apt-get install -y ttyd >/dev/null 2>&1 || {
-          print_warning "Could not auto-install ttyd. Install manually: sudo apt-get install ttyd"
-        }
+        print_info "Installing ttyd package..."
+        if sudo apt-get install -y ttyd 2>&1 | tee /tmp/ttyd_install.log | grep -q "E:"; then
+          print_error "Failed to install ttyd via apt-get"
+          cat /tmp/ttyd_install.log
+          print_info "Install manually: sudo apt-get install ttyd"
+        fi
+        rm -f /tmp/ttyd_install.log
       else
-        print_warning "Needs sudo to install ttyd. Run: sudo apt-get install ttyd"
+        # Need sudo password
+        print_info "Installing ttyd (you may be prompted for your password)..."
+        sudo apt-get update && sudo apt-get install -y ttyd || {
+          print_warning "Could not install ttyd. Install manually: sudo apt-get install ttyd"
+        }
       fi
     else
-      print_warning "Please install ttyd manually for remote viewing"
+      print_warning "apt-get not found. Please install ttyd manually for remote viewing"
       print_info "Visit: https://github.com/tsl0922/ttyd"
     fi
   elif [ "$OS" == "macos" ]; then
     # Try to install via Homebrew on macOS
     if command -v brew &>/dev/null; then
       print_info "Installing ttyd via Homebrew..."
-      brew install ttyd >/dev/null 2>&1 || {
-        print_warning "Could not auto-install ttyd. Install manually: brew install ttyd"
-      }
+      if brew install ttyd 2>&1 | tee /tmp/ttyd_install.log; then
+        print_success "ttyd installation initiated"
+      else
+        print_error "Failed to install ttyd via Homebrew"
+        cat /tmp/ttyd_install.log
+        print_info "Install manually: brew install ttyd"
+      fi
+      rm -f /tmp/ttyd_install.log
     else
-      print_warning "Homebrew not found. Install ttyd manually: brew install ttyd"
+      print_warning "Homebrew not found. Install ttyd manually"
+      print_info "Install Homebrew: https://brew.sh"
+      print_info "Then run: brew install ttyd"
     fi
   fi
 
@@ -137,6 +154,7 @@ if ! command -v ttyd &>/dev/null; then
     print_success "ttyd installed successfully"
   else
     print_warning "ttyd not installed - remote viewing will not be available"
+    print_info "The application will still work, but only locally on this machine"
   fi
 else
   print_success "ttyd already installed"
