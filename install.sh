@@ -104,31 +104,59 @@ if ! command -v ttyd &>/dev/null; then
   print_warning "ttyd not found - attempting to install for remote UI access..."
 
   if [ "$OS" == "linux" ]; then
-    # Try to install ttyd on Linux
+    # Build ttyd from source on Linux
+    print_info "Building ttyd from source..."
+
+    # Install build dependencies
     if command -v apt-get &>/dev/null; then
-      # Debian/Ubuntu/Raspberry Pi OS
-      print_info "Installing ttyd via apt..."
+      print_info "Installing build dependencies..."
       if sudo -n true 2>/dev/null; then
-        # User has passwordless sudo
-        print_info "Updating package list..."
+        # Passwordless sudo
         sudo apt-get update >/dev/null 2>&1
-        print_info "Installing ttyd package..."
-        if sudo apt-get install -y ttyd 2>&1 | tee /tmp/ttyd_install.log | grep -q "E:"; then
-          print_error "Failed to install ttyd via apt-get"
-          cat /tmp/ttyd_install.log
-          print_info "Install manually: sudo apt-get install ttyd"
-        fi
-        rm -f /tmp/ttyd_install.log
+        sudo apt-get install -y build-essential cmake git libjson-c-dev libwebsockets-dev >/dev/null 2>&1
       else
-        # Need sudo password
-        print_info "Installing ttyd (you may be prompted for your password)..."
-        sudo apt-get update && sudo apt-get install -y ttyd || {
-          print_warning "Could not install ttyd. Install manually: sudo apt-get install ttyd"
-        }
+        # Need password
+        print_info "Installing dependencies (you may be prompted for your password)..."
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake git libjson-c-dev libwebsockets-dev
       fi
     else
-      print_warning "apt-get not found. Please install ttyd manually for remote viewing"
-      print_info "Visit: https://github.com/tsl0922/ttyd"
+      print_error "apt-get not found. Cannot install build dependencies."
+      print_info "Install manually: https://github.com/tsl0922/ttyd"
+      return
+    fi
+
+    # Clone and build ttyd
+    TTYD_BUILD_DIR="/tmp/ttyd-build-$$"
+    print_info "Cloning ttyd repository..."
+    if git clone --depth 1 https://github.com/tsl0922/ttyd.git "$TTYD_BUILD_DIR" >/dev/null 2>&1; then
+      cd "$TTYD_BUILD_DIR"
+      mkdir build
+      cd build
+
+      print_info "Compiling ttyd (this may take a few minutes)..."
+      if cmake .. >/dev/null 2>&1 && make >/dev/null 2>&1; then
+        print_info "Installing ttyd..."
+        if sudo -n true 2>/dev/null; then
+          sudo make install >/dev/null 2>&1
+        else
+          sudo make install
+        fi
+
+        # Clean up build directory
+        cd /
+        rm -rf "$TTYD_BUILD_DIR"
+
+        print_success "ttyd built and installed successfully"
+      else
+        print_error "Failed to compile ttyd"
+        cd /
+        rm -rf "$TTYD_BUILD_DIR"
+        print_info "Install manually: https://github.com/tsl0922/ttyd"
+      fi
+    else
+      print_error "Failed to clone ttyd repository"
+      print_info "Install manually: https://github.com/tsl0922/ttyd"
     fi
   elif [ "$OS" == "macos" ]; then
     # Try to install via Homebrew on macOS
