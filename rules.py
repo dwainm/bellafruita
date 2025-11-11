@@ -66,11 +66,19 @@ class CommsHealthCheckRule(Rule):
             except Exception as e:
                 controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
-        # Update LED based on comms health
-        if comms_healthy:
-            procon.set('LED_GREEN', True)
-        else:
-            procon.set('LED_GREEN', False)
+        # Update LED based on comms health - only check/write every 5 seconds
+        led_timer = mem.get('_LED_CHECK_TIMER')
+        current_time = time.time()
+
+        # Check if timer expired or not set (first run)
+        if led_timer is None or (current_time - led_timer) >= 5.0:
+            # Timer expired - update LED
+            if comms_healthy:
+                procon.set('LED_GREEN', True)
+            else:
+                procon.set('LED_GREEN', False)
+            # Reset timer
+            mem.set('_LED_CHECK_TIMER', current_time)
 
 class CommsAcknowledgeRule(Rule):
     """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
