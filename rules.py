@@ -71,20 +71,20 @@ class CommsHealthCheckRule(Rule):
 
         # Turn LED on if not set and comms healthy
         if led_state is None and comms_healthy:
-            procon.set('LED_GREEN', True)
-            mem.set('_LED_STATE', True)
+            if procon.set('LED_GREEN', True):
+                mem.set('_LED_STATE', True)
         # Turn LED off if not set and comms unhealthy
         elif led_state is None and not comms_healthy:
-            procon.set('LED_GREEN', False)
-            mem.set('_LED_STATE', False)
+            if procon.set('LED_GREEN', False):
+                mem.set('_LED_STATE', False)
         # Turn LED on if was off and comms now healthy
         elif led_state is False and comms_healthy:
-            procon.set('LED_GREEN', True)
-            mem.set('_LED_STATE', True)
+            if procon.set('LED_GREEN', True):
+                mem.set('_LED_STATE', True)
         # Turn LED off if was on and comms now unhealthy
         elif led_state is True and not comms_healthy:
-            procon.set('LED_GREEN', False)
-            mem.set('_LED_STATE', False)
+            if procon.set('LED_GREEN', False):
+                mem.set('_LED_STATE', False)
 
 class CommsAcknowledgeRule(Rule):
     """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
