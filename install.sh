@@ -416,7 +416,6 @@ if [ "$OS" == "linux" ]; then
     mkdir -p "$AUTOSTART_DIR"
 
     # Use start.sh which includes ttyd support
-    TERMINAL_CMD="bash -c 'cd $INSTALL_DIR && ./start.sh'"
     print_info "Autostart will use start.sh (includes ttyd remote viewing)"
 
     AUTOSTART_FILE="$AUTOSTART_DIR/packlinefeeder.desktop"
@@ -425,7 +424,7 @@ if [ "$OS" == "linux" ]; then
 Type=Application
 Name=Bella Fruita Control System
 Comment=Apple sorting machine control system
-Exec=$TERMINAL_CMD
+Exec=bash -c 'cd $INSTALL_DIR && ./start.sh'
 Terminal=false
 StartupNotify=false
 X-GNOME-Autostart-enabled=true
