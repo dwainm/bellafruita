@@ -36,12 +36,12 @@ class CommsHealthCheckRule(Rule):
 
     def action(self, controller, procon, mem):
         """Monitor comms health and set ERROR_COMMS mode if needed."""
-        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=10.0)
 
         if not comms_healthy and mem.mode() not in ['ERROR_COMMS', 'ERROR_COMMS_ACK']:
             # Comms have failed - enter ERROR_COMMS mode
             mem.set_mode('ERROR_COMMS')
-            controller.log_manager.critical("Communications FAILED - VERSION=0 for 5+ seconds. Disconnecting and attempting reconnection...")
+            controller.log_manager.critical("Communications FAILED - VERSION=0 for 10+ seconds. Disconnecting and attempting reconnection...")
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
             # Disconnect
@@ -99,7 +99,7 @@ class CommsResetRule(Rule):
 
     def action(self, controller, procon, mem):
         """Clear error and return to READY if comms are healthy, or back to ERROR_COMMS if not."""
-        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=5.0)
+        comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=10.0)
 
         if comms_healthy:
             controller.log_manager.info("Communications RESTORED and RESET - returning to READY")
