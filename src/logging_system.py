@@ -293,9 +293,15 @@ class LogManager:
 
                     try:
                         data = json.loads(line)
+                        level = data['level']
+
+                        # Skip DEBUG messages if debug_mode is off
+                        if level == 'DEBUG' and not self.debug_mode:
+                            continue
+
                         entry = EventEntry(
                             timestamp=data['timestamp'],
-                            level=data['level'],
+                            level=level,
                             message=data['message']
                         )
                         self.event_logs.append(entry)
