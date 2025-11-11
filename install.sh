@@ -521,7 +521,7 @@ if command -v ttyd &> /dev/null; then
         echo "Or from this machine: http://localhost:$TTYD_PORT"
         echo ""
 
-        ttyd -W -p $TTYD_PORT -t fontSize=14 -t theme='{"background": "#1e1e1e"}' bash -c "cd $(pwd) && source venv/bin/activate && python main.py $*; echo 'Application exited. Press any key to close...'; read -n 1" &
+        ttyd -W -p $TTYD_PORT -t fontSize=14 -t theme='{"background": "#1e1e1e"}' bash -c "cd $(pwd) && source venv/bin/activate && unset DEBUG && python main.py $*; echo 'Application exited. Press any key to close...'; read -n 1" &
         TTYD_PID=$!
         echo $TTYD_PID > "$PID_FILE"
 
@@ -540,6 +540,7 @@ if command -v ttyd &> /dev/null; then
             rm -f "$PID_FILE"
             echo "Falling back to local mode only..."
             echo ""
+            unset DEBUG
             python main.py "$@"
         fi
     fi
@@ -548,6 +549,7 @@ else
     echo "ttyd not installed - running in local mode only"
     echo "To enable remote viewing, install ttyd: sudo apt-get install ttyd (Linux) or brew install ttyd (macOS)"
     echo ""
+    unset DEBUG
     python main.py "$@"
 fi
 EOF
