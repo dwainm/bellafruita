@@ -73,9 +73,11 @@ class CommsHealthCheckRule(Rule):
         # LED should match comms health
         if comms_healthy and not current_led:
             # Need to turn LED on
+            controller.log_manager.debug(f"Turning LED_GREEN ON (comms_healthy={comms_healthy}, current_led={current_led})")
             procon.set('LED_GREEN', True)
         elif not comms_healthy and current_led:
             # Need to turn LED off
+            controller.log_manager.debug(f"Turning LED_GREEN OFF (comms_healthy={comms_healthy}, current_led={current_led})")
             procon.set('LED_GREEN', False)
 
 class CommsAcknowledgeRule(Rule):
