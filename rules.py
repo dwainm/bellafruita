@@ -66,20 +66,17 @@ class CommsHealthCheckRule(Rule):
             except Exception as e:
                 controller.log_manager.debug(f"Reconnection attempt failed: {e}")
 
-        # Update LED based on comms health
-        # Use extended_hold to avoid reacting to momentary read glitches
-        if comms_healthy:
-            # Comms healthy - LED should be ON
-            # Only turn on if it's been OFF for 0.5+ seconds (debounce)
-            if procon.extended_hold('LED_GREEN', False, 0.5):
-                controller.log_manager.debug("Turning LED_GREEN ON (comms healthy)")
-                procon.set('LED_GREEN', True)
-        else:
-            # Comms unhealthy - LED should be OFF
-            # Only turn off if it's been ON for 0.5+ seconds (debounce)
-            if procon.extended_hold('LED_GREEN', True, 0.5):
-                controller.log_manager.debug("Turning LED_GREEN OFF (comms unhealthy)")
-                procon.set('LED_GREEN', False)
+        # Update LED based on comms health (write once per state change)
+        last_written = mem.get('_LED_LAST_WRITTEN')
+
+        if comms_healthy and last_written != True:
+            controller.log_manager.debug("Turning LED_GREEN ON (comms healthy)")
+            procon.set('LED_GREEN', True)
+            mem.set('_LED_LAST_WRITTEN', True)
+        elif not comms_healthy and last_written != False:
+            controller.log_manager.debug("Turning LED_GREEN OFF (comms unhealthy)")
+            procon.set('LED_GREEN', False)
+            mem.set('_LED_LAST_WRITTEN', False)
 
 class CommsAcknowledgeRule(Rule):
     """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
