@@ -74,28 +74,47 @@ class LEDOffInErrorRule(Rule):
         super().__init__("LED Off in Error")
 
     def condition(self, procon, mem):
-        return mem.mode() in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
+        return False
+        # return mem.mode() in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
 
     def action(self, controller, procon, mem):
-        """Turn LED off in error modes."""
+        """Turn LED off in error modes and clear timer."""
         procon.set('LED_GREEN', False)
         mem.set('_LED_ON', False)
+        mem.set('_LED_TIMER', None)
 
 
 class LEDOnInReadyRule(Rule):
-    """Turn LED on when in READY mode (if not already on)."""
+    """Blink LED on/off every 10 seconds when in READY mode."""
 
     def __init__(self):
-        super().__init__("LED On in Ready")
+        super().__init__("LED Blink in Ready")
 
     def condition(self, procon, mem):
-        led_already_on = mem.get('_LED_ON')
-        return mem.mode() == 'READY' and not led_already_on
+        return mem.mode() == 'READY'
 
     def action(self, controller, procon, mem):
-        """Turn LED on in ready mode."""
-        procon.set('LED_GREEN', True)
-        mem.set('_LED_ON', True)
+        """Blink LED every 10 seconds."""
+        led_timer = mem.get('_LED_TIMER')
+        led_on = mem.get('_LED_ON')
+        current_time = time.time()
+
+        # Initialize on first run in READY mode
+        if led_timer is None:
+            procon.set('LED_GREEN', True)
+            mem.set('_LED_TIMER', current_time)
+            mem.set('_LED_ON', True)
+            controller.log_manager.debug("LED initialized ON")
+            return
+
+        # Check if 10 seconds have elapsed
+        if (current_time - led_timer) >= 10.0:
+            # Toggle LED state
+            new_state = not led_on
+            procon.set('LED_GREEN', new_state)
+            mem.set('_LED_TIMER', current_time)
+            mem.set('_LED_ON', new_state)
+            controller.log_manager.debug(f"LED toggled to {'ON' if new_state else 'OFF'}")
 
 
 class CommsAcknowledgeRule(Rule):
