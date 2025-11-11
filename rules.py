@@ -338,7 +338,7 @@ class CratePositionsSensorLedOn(Rule):
 
     def action(self, controller, procon, mem):
         """Turn on red LED."""
-        procon.set('LED_RED', True)
+        # procon.set('LED_RED', True)
 
 class CratePositionsSensorLedOff(Rule):
     """Turn off crate position LED when crates are positioned correctly."""
@@ -354,7 +354,7 @@ class CratePositionsSensorLedOff(Rule):
 
     def action(self, controller, procon, mem):
         """Turn off red LED."""
-        procon.set('LED_RED', False)
+        # procon.set('LED_RED', False)
 
 class InitiateMoveC3toC2(Rule):
     """Start C3→C2 move: single bin from C3 to C2 after 30s delay."""
