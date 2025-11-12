@@ -346,6 +346,22 @@
         let lastInputHeartbeat = 0;
         let lastOutputHeartbeat = 0;
 
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                // Update site name in header
+                if (config.site_name) {
+                    document.getElementById('site-name').textContent = config.site_name;
+                    document.title = `${config.site_name} Dashboard`;
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+                // Keep default site name if config fetch fails
+            }
+        }
+
         function connect() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -562,8 +578,10 @@
             }
         }
 
-        // Connect on page load
-        connect();
+        // Load configuration first, then connect
+        loadConfig().then(() => {
+            connect();
+        });
 
         // Refresh logs periodically
         setInterval(fetchLogs, 2000);
