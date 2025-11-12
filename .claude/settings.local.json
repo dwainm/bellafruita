@@ -15,7 +15,9 @@
       "Bash(chmod:*)",
       "Bash(timeout 5 python3:*)",
       "WebSearch",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
