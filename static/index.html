@@ -601,7 +601,7 @@
                 const data = await response.json();
 
                 if (data.logs && data.logs.length > 0) {
-                    const html = data.logs.slice(-20).reverse().map(log => {
+                    const html = data.logs.slice(-1000).reverse().map(log => {
                         return `
                             <div class="log-entry">
                                 <span class="log-timestamp">${log.timestamp || ''}</span>
