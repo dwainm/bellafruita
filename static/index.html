@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bella Fruita Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            padding: 15px;
+        }
+
+        /* Header matching TUI */
+        .header {
+            background: #1a1a1a;
+            border: 2px solid #ff0066;
+            padding: 15px 20px;
+            margin-bottom: 15px;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .site-name {
+            color: #00d9ff;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .operation-mode {
+            text-align: center;
+            padding: 8px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .mode-normal {
+            background: #4caf50;
+            color: #000;
+        }
+
+        .mode-error {
+            background: #f44336;
+            color: #fff;
+            animation: blink 1s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 50%, 100% { opacity: 1; }
+            25%, 75% { opacity: 0.5; }
+        }
+
+        .heartbeats {
+            text-align: right;
+            font-size: 14px;
+        }
+
+        .heartbeat-item {
+            display: inline-block;
+            margin-left: 15px;
+        }
+
+        .heartbeat-circle {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-left: 5px;
+        }
+
+        .heartbeat-circle.active {
+            background: #4caf50;
+        }
+
+        .heartbeat-circle.inactive {
+            background: #666;
+        }
+
+        /* Main content panels */
+        .panel {
+            background: #1a1a1a;
+            border: 2px solid #00aaff;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .panel-title {
+            color: #ffaa00;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        /* I/O Grid Layout (3 columns like TUI) */
+        .io-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            font-size: 14px;
+        }
+
+        .io-column h3 {
+            color: #00d9ff;
+            font-size: 16px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .io-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 0;
+        }
+
+        .io-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid #4caf50;
+            background: #1a1a1a;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+
+        .io-indicator.active {
+            background: #4caf50;
+            box-shadow: 0 0 8px #4caf50;
+        }
+
+        .io-label {
+            color: #e0e0e0;
+        }
+
+        .io-description {
+            color: #888;
+            font-size: 12px;
+            margin-left: 20px;
+        }
+
+        .register-display {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #444;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .register-display span {
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        /* Rules Panel */
+        .rules-panel {
+            border-color: #ffaa00;
+        }
+
+        .no-rules {
+            color: #666;
+            font-style: italic;
+        }
+
+        .rule-item {
+            padding: 6px 10px;
+            margin: 5px 0;
+            background: #2a2a2a;
+            border-left: 3px solid #00d9ff;
+        }
+
+        /* State Variables Grid */
+        .state-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .state-item {
+            background: #2a2a2a;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .state-key {
+            color: #aaa;
+        }
+
+        .state-value {
+            font-weight: bold;
+        }
+
+        .state-value.true {
+            color: #4caf50;
+        }
+
+        .state-value.false {
+            color: #f44336;
+        }
+
+        /* System Log */
+        .log-panel {
+            border-color: #ffaa00;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            font-size: 12px;
+            padding: 2px 0;
+            line-height: 1.4;
+        }
+
+        .log-timestamp {
+            color: #666;
+        }
+
+        .log-level {
+            font-weight: bold;
+            margin: 0 8px;
+        }
+
+        .log-level.INFO { color: #00d9ff; }
+        .log-level.ERROR { color: #f44336; }
+        .log-level.WARNING { color: #ff9800; }
+        .log-level.DEBUG { color: #9e9e9e; }
+        .log-level.CRITICAL { color: #ff1744; }
+
+        .log-message {
+            color: #e0e0e0;
+        }
+
+        .no-data {
+            color: #666;
+            font-style: italic;
+            padding: 10px;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header: Site Name | Mode | Heartbeats -->
+    <div class="header">
+        <div class="site-name" id="site-name">Bella Fruita</div>
+        <div class="operation-mode mode-normal" id="operation-mode">NORMAL</div>
+        <div class="heartbeats">
+            <span class="heartbeat-item">
+                INPUT:<span class="heartbeat-circle inactive" id="input-heartbeat"></span>
+            </span>
+            <span class="heartbeat-item">
+                OUTPUT:<span class="heartbeat-circle inactive" id="output-heartbeat"></span>
+            </span>
+        </div>
+    </div>
+
+    <!-- I/O Panel: Input Coils, Output Coils & Registers (3 columns) -->
+    <div class="panel">
+        <div class="panel-title">Input Coils, Output Coils & Registers</div>
+        <div class="io-grid">
+            <!-- Input Coils Column -->
+            <div class="io-column">
+                <h3>Input Coils</h3>
+                <div id="input-coils">
+                    <div class="no-data">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Middle Column (more inputs) -->
+            <div class="io-column">
+                <h3>Input Signals</h3>
+                <div id="input-signals">
+                    <div class="no-data">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Output Coils Column -->
+            <div class="io-column">
+                <h3>Output Coils</h3>
+                <div id="output-coils">
+                    <div class="no-data">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register Display -->
+        <div class="register-display">
+            REG0 (Ver): <span id="version-register">0</span>
+        </div>
+    </div>
+
+    <!-- Active Rules Panel -->
+    <div class="panel rules-panel">
+        <div class="panel-title">Active Rules</div>
+        <div id="active-rules">
+            <div class="no-rules">No rules active</div>
+        </div>
+    </div>
+
+    <!-- State Variables Panel -->
+    <div class="panel">
+        <div class="panel-title">State Variables</div>
+        <div id="state-variables" class="state-grid">
+            <div class="no-data">No state variables</div>
+        </div>
+    </div>
+
+    <!-- System Log Panel -->
+    <div class="panel log-panel">
+        <div class="panel-title">System Log</div>
+        <div id="system-log">
+            <div class="no-data">Loading logs...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectInterval = null;
+        let lastInputHeartbeat = 0;
+        let lastOutputHeartbeat = 0;
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                if (reconnectInterval) {
+                    clearInterval(reconnectInterval);
+                    reconnectInterval = null;
+                }
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                updateDashboard(data);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                document.getElementById('operation-mode').textContent = 'DISCONNECTED';
+                document.getElementById('operation-mode').className = 'operation-mode mode-error';
+
+                // Attempt reconnection
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(() => {
+                        console.log('Attempting to reconnect...');
+                        connect();
+                    }, 3000);
+                }
+            };
+        }
+
+        function updateDashboard(data) {
+            // Update operation mode
+            const modeEl = document.getElementById('operation-mode');
+            if (data.in_error_comms_mode) {
+                modeEl.textContent = '⚠ COMMS UNHEALTHY';
+                modeEl.className = 'operation-mode mode-error';
+            } else {
+                modeEl.textContent = 'NORMAL';
+                modeEl.className = 'operation-mode mode-normal';
+            }
+
+            // Update heartbeats based on VERSION register (comms health indicator)
+            const inputHB = document.getElementById('input-heartbeat');
+            const outputHB = document.getElementById('output-heartbeat');
+
+            // Check if comms are healthy (VERSION register is not 0)
+            const version = data.output_data?.VERSION || 0;
+            const commsHealthy = (version !== 0);
+
+            // Pulse heartbeat when counter changes AND comms are healthy
+            if (data.input_heartbeat !== lastInputHeartbeat) {
+                lastInputHeartbeat = data.input_heartbeat;
+                if (commsHealthy) {
+                    inputHB.className = 'heartbeat-circle active';
+                    // Reset to inactive after a short delay
+                    setTimeout(() => { inputHB.className = 'heartbeat-circle inactive'; }, 150);
+                } else {
+                    inputHB.className = 'heartbeat-circle inactive';
+                }
+            }
+
+            if (data.output_heartbeat !== lastOutputHeartbeat) {
+                lastOutputHeartbeat = data.output_heartbeat;
+                if (commsHealthy) {
+                    outputHB.className = 'heartbeat-circle active';
+                    // Reset to inactive after a short delay
+                    setTimeout(() => { outputHB.className = 'heartbeat-circle inactive'; }, 150);
+                } else {
+                    outputHB.className = 'heartbeat-circle inactive';
+                }
+            }
+
+            // Update I/O states
+            updateIOSection(data.input_data, data.output_data);
+
+            // Update active rules
+            updateActiveRules(data.active_rules);
+
+            // Update state variables
+            updateStateVariables(data.rule_state);
+
+            // Fetch and update logs
+            fetchLogs();
+        }
+
+        function updateIOSection(inputData, outputData) {
+            if (!inputData || !outputData) return;
+
+            // Split inputs into two columns (like TUI screenshot)
+            const inputCoils = ['S1', 'S2', 'CS1', 'CS2', 'CS3', 'M1_Trip', 'M2_Trip', 'E_Stop'];
+            const inputSignals = ['Manual_Select', 'Auto_Select', 'Klaar_Geweeg_Btn', 'CPS_1', 'CPS_2', 'Reset_Btn', 'PALM_Run_Signal', 'DHLM_Trip_Signal'];
+            const outputCoils = ['LED_GREEN', 'MOTOR_2', 'MOTOR_3', 'LED_RED'];
+
+            // Render input coils
+            const inputCoilsHtml = inputCoils.map(key => {
+                if (inputData[key] === undefined) return '';
+                const isActive = inputData[key] === true || inputData[key] === 1;
+                return `
+                    <div class="io-item">
+                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
+                        <div class="io-label">${key}</div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('input-coils').innerHTML = inputCoilsHtml || '<div class="no-data">No data</div>';
+
+            // Render input signals
+            const inputSignalsHtml = inputSignals.map(key => {
+                if (inputData[key] === undefined) return '';
+                const isActive = inputData[key] === true || inputData[key] === 1;
+                return `
+                    <div class="io-item">
+                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
+                        <div class="io-label">${key}</div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('input-signals').innerHTML = inputSignalsHtml || '<div class="no-data">No data</div>';
+
+            // Render output coils
+            const outputCoilsHtml = outputCoils.map(key => {
+                if (outputData[key] === undefined) return '';
+                const isActive = outputData[key] === true || outputData[key] === 1;
+                return `
+                    <div class="io-item">
+                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
+                        <div class="io-label">${key}</div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('output-coils').innerHTML = outputCoilsHtml || '<div class="no-data">No data</div>';
+
+            // Update VERSION register
+            if (outputData.VERSION !== undefined) {
+                document.getElementById('version-register').textContent = outputData.VERSION;
+            }
+        }
+
+        function updateActiveRules(rules) {
+            const container = document.getElementById('active-rules');
+
+            if (!rules || rules.length === 0) {
+                container.innerHTML = '<div class="no-rules">No rules active</div>';
+                return;
+            }
+
+            const html = rules.map(rule => `
+                <div class="rule-item">${rule}</div>
+            `).join('');
+
+            container.innerHTML = html;
+        }
+
+        function updateStateVariables(state) {
+            const container = document.getElementById('state-variables');
+
+            if (!state || Object.keys(state).length === 0) {
+                container.innerHTML = '<div class="no-data">No state variables</div>';
+                return;
+            }
+
+            const sortedKeys = Object.keys(state).sort();
+            const html = sortedKeys.map(key => {
+                const value = state[key];
+                let valueClass = '';
+                let displayValue = value;
+
+                if (typeof value === 'boolean') {
+                    valueClass = value ? 'true' : 'false';
+                    displayValue = value ? 'TRUE' : 'FALSE';
+                } else if (typeof value === 'number') {
+                    displayValue = value.toFixed(2);
+                }
+
+                return `
+                    <div class="state-item">
+                        <span class="state-key">${key}</span>
+                        <span class="state-value ${valueClass}">${displayValue}</span>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+
+                if (data.logs && data.logs.length > 0) {
+                    const html = data.logs.slice(-20).reverse().map(log => {
+                        return `
+                            <div class="log-entry">
+                                <span class="log-timestamp">${log.timestamp || ''}</span>
+                                <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
+                                <span class="log-message">${log.message || ''}</span>
+                            </div>
+                        `;
+                    }).join('');
+
+                    document.getElementById('system-log').innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+            }
+        }
+
+        // Connect on page load
+        connect();
+
+        // Refresh logs periodically
+        setInterval(fetchLogs, 2000);
+    </script>
+</body>
+</html>

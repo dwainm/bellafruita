@@ -17,7 +17,20 @@
       "WebSearch",
       "Bash(bash:*)",
       "WebFetch(domain:github.com)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(pip install:*)",
+      "Bash(lsof -i :8080)",
+      "Bash(curl:*)",
+      "Bash(kill:*)",
+      "Bash(timeout 3 python3:*)",
+      "Bash(./start.sh:*)",
+      "Bash(timeout 3 ./start.sh:*)",
+      "Bash(./start-web.sh:*)",
+      "Bash(ls:*)",
+      "Bash(lsof:*)",
+      "Bash(timeout 3 python main.py:*)",
+      "Bash(timeout:*)",
+      "Bash(python -m py_compile:*)"
     ],
     "deny": [],
     "ask": []

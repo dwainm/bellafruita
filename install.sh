@@ -518,10 +518,13 @@ fi
 # Create convenience scripts
 print_info "Creating convenience scripts..."
 
-# Make start.sh executable (it's part of the git repo now)
+# Make start scripts executable (they're part of the git repo now)
 if [ -f "$INSTALL_DIR/start.sh" ]; then
   chmod +x "$INSTALL_DIR/start.sh"
-  print_success "start.sh made executable"
+  chmod +x "$INSTALL_DIR/start-tui.sh" 2>/dev/null
+  chmod +x "$INSTALL_DIR/start-web.sh" 2>/dev/null
+  chmod +x "$INSTALL_DIR/start-logs.sh" 2>/dev/null
+  print_success "Start scripts made executable"
 else
   print_warning "start.sh not found in repository"
 fi

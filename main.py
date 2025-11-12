@@ -182,6 +182,18 @@ def main():
         action='store_true',
         help='Run in mock mode (testing without hardware)'
     )
+    parser.add_argument(
+        '--view',
+        choices=['tui', 'web', 'logs'],
+        default='tui',
+        help='UI mode: tui (textual interface), web (browser dashboard), logs (headless)'
+    )
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=7681,
+        help='Port for web server (only used with --view web, default: 7681 same as ttyd)'
+    )
     args = parser.parse_args()
 
     # Create configuration
@@ -214,33 +226,60 @@ def main():
     )
 
     try:
-        # Start polling thread BEFORE TUI (so data is ready)
+        # Start polling thread BEFORE UI (so data is ready)
         polling_thread.start()
         controller.log_manager.debug("Background polling thread started")
 
-        # Run with TUI (editable in mock mode, read-only in real mode)
-        # TUI now just renders state, never blocks on I/O
-        run_tui(
-            controller=controller,
-            rule_engine=rule_engine,
-            config=config,
-            editable=config.use_mock,
-            shared_state=shared_state
-        )
+        # Route to appropriate viewer based on --view argument
+        if args.view == 'web':
+            # Web dashboard mode
+            from src.web_server import run_web_dashboard
+            controller.log_manager.info(f"Starting in WEB mode on port {args.port}")
+            run_web_dashboard(shared_state, controller.log_manager, config, port=args.port)
+
+        elif args.view == 'logs':
+            # Headless logs-only mode
+            controller.log_manager.info("Starting in LOGS-ONLY mode (headless)")
+            controller.log_manager.info("Press Ctrl+C to stop")
+            # Just keep running until interrupted
+            import time
+            while True:
+                time.sleep(1)
+
+        else:  # args.view == 'tui' (default)
+            # Textual TUI mode (editable in mock mode, read-only in real mode)
+            controller.log_manager.info("Starting in TUI mode")
+            run_tui(
+                controller=controller,
+                rule_engine=rule_engine,
+                config=config,
+                editable=config.use_mock,
+                shared_state=shared_state
+            )
 
     except KeyboardInterrupt:
         controller.log_manager.info("Shutting down")
         # Turn off comms LED
-        controller.procon.set('LED_GREEN', False)
+        try:
+            controller.procon.set('LED_GREEN', False)
+        except:
+            pass
     finally:
         # Stop polling thread
         controller.log_manager.info("Stopping polling thread...")
         polling_thread.stop()
-        polling_thread.join(timeout=2.0)
+        try:
+            polling_thread.join(timeout=2.0)
+        except KeyboardInterrupt:
+            # User hit Ctrl+C again during shutdown - force exit
+            pass
 
         # Close connections
-        controller.close()
-        controller.log_manager.info("Connections closed")
+        try:
+            controller.close()
+            controller.log_manager.info("Connections closed")
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":
