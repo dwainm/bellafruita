@@ -65,6 +65,13 @@ class WebDashboard:
             """REST endpoint for current state snapshot."""
             return self.shared_state.get_snapshot()
 
+        @self.app.get("/api/config")
+        async def get_config():
+            """REST endpoint for configuration values."""
+            return {
+                "site_name": self.config.site_name
+            }
+
         @self.app.get("/api/logs")
         async def get_logs():
             """REST endpoint for recent log entries."""
