@@ -371,7 +371,7 @@
 
             ws.onclose = () => {
                 console.log('WebSocket disconnected');
-                document.getElementById('operation-mode').textContent = 'DISCONNECTED';
+                document.getElementById('operation-mode').textContent = 'NO CONNECTION TO RUNNER';
                 document.getElementById('operation-mode').className = 'operation-mode mode-error';
 
                 // Attempt reconnection
