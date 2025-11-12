@@ -49,6 +49,16 @@
             color: #000;
         }
 
+        .mode-move {
+            background: #00b2d1;
+            color: #000;
+        }
+
+        .mode-warning {
+            background: #ffeb3b;
+            color: #000;
+        }
+
         .mode-error {
             background: #f44336;
             color: #fff;
@@ -270,7 +280,7 @@
     <!-- Header: Site Name | Mode | Heartbeats -->
     <div class="header">
         <div class="site-name" id="site-name">Bella Fruita</div>
-        <div class="operation-mode mode-normal" id="operation-mode">NORMAL</div>
+        <div class="operation-mode mode-normal" id="operation-mode">Initialising...</div>
         <div class="heartbeats">
             <span class="heartbeat-item">
                 INPUT:<span class="heartbeat-circle inactive" id="input-heartbeat"></span>
@@ -403,11 +413,41 @@
         function updateDashboard(data) {
             // Update operation mode
             const modeEl = document.getElementById('operation-mode');
-            if (data.in_error_comms_mode) {
-                modeEl.textContent = '⚠ COMMS UNHEALTHY';
+            
+            // Get mode from rule_state
+            const mode = data.rule_state?._MODE;
+            
+            if (!mode || mode === "") {
+                // No mode set yet - initialising
+                modeEl.textContent = 'Initialising...';
+                modeEl.className = 'operation-mode mode-normal';
+            } else if (mode === 'ERROR_COMMS') {
+                // Communications error - red
+                modeEl.textContent = '⚠ COMMUNICATIONS FAILED - SWITCH TO MANUAL TO ACKNOWLEDGE';
                 modeEl.className = 'operation-mode mode-error';
+            } else if (mode === 'ERROR_COMMS_ACK') {
+                // Communications error acknowledged - yellow
+                modeEl.textContent = '⚠ COMMS ERROR ACKNOWLEDGED - SWITCH TO AUTO TO RESET';
+                modeEl.className = 'operation-mode mode-warning';
+            } else if (mode === 'ERROR_ESTOP') {
+                // Emergency stop - red
+                modeEl.textContent = '🛑 EMERGENCY STOP - RELEASE E-STOP AND CYCLE AUTO SWITCH';
+                modeEl.className = 'operation-mode mode-error';
+            } else if (mode === 'ERROR_SAFETY') {
+                // Safety error - yellow
+                modeEl.textContent = '⚠ SAFETY ERROR - CHECK TRIP SIGNALS';
+                modeEl.className = 'operation-mode mode-warning';
+            } else if (mode === 'READY') {
+                // Ready state - green
+                modeEl.textContent = '✓ READY';
+                modeEl.className = 'operation-mode mode-normal';
+            } else if (mode.startsWith('MOVING_')) {
+                // Moving operations - blue
+                modeEl.textContent = `▶ ${mode}`;
+                modeEl.className = 'operation-mode mode-move';
             } else {
-                modeEl.textContent = 'NORMAL';
+                // Unknown mode
+                modeEl.textContent = `MODE: ${mode}`;
                 modeEl.className = 'operation-mode mode-normal';
             }
 
