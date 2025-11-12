@@ -75,7 +75,7 @@ class WebDashboard:
         @self.app.get("/api/logs")
         async def get_logs():
             """REST endpoint for recent log entries."""
-            recent_events = self.log_manager.get_recent_events(count=100)
+            recent_events = self.log_manager.get_recent_events(count=1000)
 
             # Format events for frontend
             logs = []

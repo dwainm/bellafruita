@@ -30,7 +30,8 @@
       "Bash(lsof:*)",
       "Bash(timeout 3 python main.py:*)",
       "Bash(timeout:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": [],
     "ask": []

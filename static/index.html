@@ -618,10 +618,25 @@
             }
         }
 
-        // Load configuration first, then connect
-        loadConfig().then(() => {
-            connect();
-        });
+        async function loadInitialState() {
+            try {
+                console.log('Fetching initial state...');
+                const response = await fetch('/api/state');
+                const data = await response.json();
+                console.log('Initial state loaded:', data);
+                updateDashboard(data);
+            } catch (error) {
+                console.error('Failed to load initial state:', error);
+                // Continue anyway - WebSocket will provide updates
+            }
+        }
+
+        // Load configuration and initial state, then connect to WebSocket
+        loadConfig()
+            .then(() => loadInitialState())
+            .then(() => {
+                connect();
+            });
 
         // Refresh logs periodically
         setInterval(fetchLogs, 2000);
