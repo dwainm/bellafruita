@@ -98,96 +98,6 @@ if ! command -v git &>/dev/null; then
   exit 1
 fi
 
-# Check/Install ttyd for remote terminal viewing
-print_info "Checking ttyd for remote terminal access..."
-if ! command -v ttyd &>/dev/null; then
-  print_warning "ttyd not found - attempting to install for remote UI access..."
-
-  if [ "$OS" == "linux" ]; then
-    # Build ttyd from source on Linux
-    print_info "Building ttyd from source..."
-
-    # Install build dependencies
-    if command -v apt-get &>/dev/null; then
-      print_info "Installing build dependencies..."
-      if sudo -n true 2>/dev/null; then
-        # Passwordless sudo
-        sudo apt-get update >/dev/null 2>&1
-        sudo apt-get install -y build-essential cmake git libjson-c-dev libwebsockets-dev >/dev/null 2>&1
-      else
-        # Need password
-        print_info "Installing dependencies (you may be prompted for your password)..."
-        sudo apt-get update
-        sudo apt-get install -y build-essential cmake git libjson-c-dev libwebsockets-dev
-      fi
-    else
-      print_error "apt-get not found. Cannot install build dependencies."
-      print_info "Install manually: https://github.com/tsl0922/ttyd"
-      return
-    fi
-
-    # Clone and build ttyd
-    TTYD_BUILD_DIR="/tmp/ttyd-build-$$"
-    print_info "Cloning ttyd repository..."
-    if git clone --depth 1 https://github.com/tsl0922/ttyd.git "$TTYD_BUILD_DIR" >/dev/null 2>&1; then
-      cd "$TTYD_BUILD_DIR"
-      mkdir build
-      cd build
-
-      print_info "Compiling ttyd (this may take a few minutes)..."
-      if cmake .. >/dev/null 2>&1 && make >/dev/null 2>&1; then
-        print_info "Installing ttyd..."
-        if sudo -n true 2>/dev/null; then
-          sudo make install >/dev/null 2>&1
-        else
-          sudo make install
-        fi
-
-        # Clean up build directory
-        cd /
-        rm -rf "$TTYD_BUILD_DIR"
-
-        print_success "ttyd built and installed successfully"
-      else
-        print_error "Failed to compile ttyd"
-        cd /
-        rm -rf "$TTYD_BUILD_DIR"
-        print_info "Install manually: https://github.com/tsl0922/ttyd"
-      fi
-    else
-      print_error "Failed to clone ttyd repository"
-      print_info "Install manually: https://github.com/tsl0922/ttyd"
-    fi
-  elif [ "$OS" == "macos" ]; then
-    # Try to install via Homebrew on macOS
-    if command -v brew &>/dev/null; then
-      print_info "Installing ttyd via Homebrew..."
-      if brew install ttyd 2>&1 | tee /tmp/ttyd_install.log; then
-        print_success "ttyd installation initiated"
-      else
-        print_error "Failed to install ttyd via Homebrew"
-        cat /tmp/ttyd_install.log
-        print_info "Install manually: brew install ttyd"
-      fi
-      rm -f /tmp/ttyd_install.log
-    else
-      print_warning "Homebrew not found. Install ttyd manually"
-      print_info "Install Homebrew: https://brew.sh"
-      print_info "Then run: brew install ttyd"
-    fi
-  fi
-
-  # Check if installation succeeded
-  if command -v ttyd &>/dev/null; then
-    print_success "ttyd installed successfully"
-  else
-    print_warning "ttyd not installed - remote viewing will not be available"
-    print_info "The application will still work, but only locally on this machine"
-  fi
-else
-  print_success "ttyd already installed"
-fi
-
 # Save existing config BEFORE any git operations
 SAVED_SITE_NAME=""
 SAVED_INPUT_IP=""
@@ -443,7 +353,7 @@ if [ "$OS" == "linux" ]; then
       TERMINAL_CMD="lxterminal --command=\"bash -c 'cd $INSTALL_DIR && ./start.sh; exec bash'\""
     fi
 
-    print_info "Autostart will use start.sh (includes ttyd remote viewing)"
+    print_info "Autostart will use start.sh"
 
     AUTOSTART_FILE="$AUTOSTART_DIR/packlinefeeder.desktop"
     cat >"$AUTOSTART_FILE" <<EOF

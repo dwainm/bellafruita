@@ -10,7 +10,6 @@ Bella Fruita controls conveyor feeders for an apple sorting machine using PLC la
 
 - ✅ **PLC Ladder Logic** - Rule-based control system matching industrial PLC behavior
 - ✅ **Real-time TUI** - Live monitoring via Textual terminal interface
-- ✅ **Remote Web Access** - View and control TUI from any browser on port 7681
 - ✅ **Modbus Communication** - Integration with industrial PLC hardware
 - ✅ **Safety Interlocks** - Emergency stop, trip signals, and safety checks
 - ✅ **Persistent Logging** - System events survive crashes and restarts
@@ -60,11 +59,7 @@ cd ~/bellafruita
 ./start.sh
 ```
 
-The system automatically enables **remote viewing** of the TUI via web browser:
-- **Local access**: http://localhost:7681
-- **Remote access**: http://YOUR_RASPBERRY_PI_IP:7681
-
-This allows you to monitor the system from any device with a web browser (phone, tablet, laptop) without SSH. The remote view is read/write enabled, so you can interact with the TUI remotely.
+This starts the TUI (Terminal User Interface) directly in your terminal.
 
 ### Auto-Start on Boot (Configured during installation)
 
@@ -176,27 +171,6 @@ cd ~/bellafruita
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design
 
 ## Troubleshooting
-
-### Can't Access Remote Web UI
-```bash
-# Find your Raspberry Pi's IP address
-hostname -I
-
-# Check if ttyd is running
-ps aux | grep ttyd
-
-# Check if port 7681 is open
-nc -zv localhost 7681
-
-# Install ttyd if missing
-sudo apt-get install ttyd  # Raspberry Pi/Debian/Ubuntu
-brew install ttyd          # macOS
-
-# Allow port through firewall (if enabled)
-sudo ufw allow 7681/tcp
-```
-
-**Note**: Remote viewing requires `ttyd` to be installed. The installer attempts to install it automatically.
 
 ### Can't Connect to PLC
 ```bash

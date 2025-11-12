@@ -12,7 +12,7 @@ if ! python -m py_compile main.py config.py 2>/dev/null; then
   exit 1
 fi
 
-# Default port (same as ttyd for consistency)
+# Default port
 PORT=7681
 
 # Parse command line arguments for port

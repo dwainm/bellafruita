@@ -192,7 +192,7 @@ def main():
         '--port',
         type=int,
         default=7681,
-        help='Port for web server (only used with --view web, default: 7681 same as ttyd)'
+        help='Port for web server (only used with --view web, default: 7681)'
     )
     args = parser.parse_args()
 
