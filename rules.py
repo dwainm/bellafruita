@@ -71,12 +71,7 @@ class CommsHealthCheckRule(Rule):
         current_mode = mem.mode()
         in_error_mode = current_mode in ['ERROR_COMMS', 'ERROR_COMMS_ACK']
         led_should_be_on = comms_healthy and not in_error_mode
-
-        last_led_state = mem.get('_LED_GREEN_STATE')
-        if led_should_be_on != last_led_state:
-            procon.set('LED_GREEN', led_should_be_on)
-            mem.set('_LED_GREEN_STATE', led_should_be_on)
-
+        procon.set('LED_GREEN', led_should_be_on)
 
 class CommsAcknowledgeRule(Rule):
     """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
