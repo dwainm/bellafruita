@@ -88,6 +88,14 @@ class WebDashboard:
 
             return {"logs": logs}
 
+        @self.app.post("/tipbins")
+        async def set_klaar_geweeg():
+            """POST endpoint to set klaar_geweeg state to true."""
+            with self.shared_state.lock:
+                self.shared_state.klaar_geweeg = True
+            self.log_manager.info("klaar_geweeg set to True via API")
+            return {"success": True, "klaar_geweeg": True}
+
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
             """WebSocket endpoint for real-time state updates."""

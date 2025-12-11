@@ -35,6 +35,9 @@ class SystemState:
     input_heartbeat: int = 0
     output_heartbeat: int = 0
 
+    # External trigger for klaar_geweeg button press
+    klaar_geweeg: bool = False
+
     def update_from_poll(self, input_data: Dict[str, Any], output_data: Dict[str, Any]) -> None:
         """Update state from polling thread (must be called with lock held)."""
         self.input_data = input_data.copy()
@@ -53,15 +56,20 @@ class SystemState:
     def get_snapshot(self) -> dict:
         """Get a thread-safe snapshot of all state."""
         with self.lock:
+            # Inject klaar_geweeg into rule_state so it shows in State Variables
+            rule_state_with_virtual = self.rule_state.copy()
+            rule_state_with_virtual['KLAAR_GEWEEG'] = self.klaar_geweeg
+
             return {
                 'input_data': self.input_data.copy(),
                 'output_data': self.output_data.copy(),
                 'in_error_comms_mode': self.in_error_comms_mode,
                 'connected': self.connected,
-                'rule_state': self.rule_state.copy(),
+                'rule_state': rule_state_with_virtual,
                 'active_rules': self.active_rules.copy(),
                 'input_heartbeat': self.input_heartbeat,
                 'output_heartbeat': self.output_heartbeat,
+                'klaar_geweeg': self.klaar_geweeg,
             }
 
 
