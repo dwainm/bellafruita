@@ -73,6 +73,38 @@ class CommsHealthCheckRule(Rule):
         led_should_be_on = comms_healthy and not in_error_mode
         procon.set('LED_GREEN', led_should_be_on)
 
+
+class KlaarGeweegFlagRule(Rule):
+    """Check for KLAAR_GEWEEG flag file and set memory if present."""
+
+    def __init__(self):
+        super().__init__("Klaar Geweeg Flag Check")
+
+    def condition(self, procon, mem):
+        """Always check for the flag file."""
+        return True
+
+    def action(self, controller, procon, mem):
+        """Check for flag file and set KLAAR_GEWEEG in memory if present."""
+        import tempfile
+        import os
+
+        flag_file = os.path.join(tempfile.gettempdir(), 'bellafruita_klaar_geweeg.flag')
+        if os.path.exists(flag_file):
+            try:
+                # Set in rule engine memory
+                controller.log_manager.info(f"Before set: KLAAR_GEWEEG = {mem.get('KLAAR_GEWEEG')}")
+                mem.set('KLAAR_GEWEEG', True)
+                controller.log_manager.info(f"After set: KLAAR_GEWEEG = {mem.get('KLAAR_GEWEEG')}")
+                # Delete the flag file
+                os.remove(flag_file)
+                controller.log_manager.info("KLAAR_GEWEEG flag detected and set in memory")
+            except Exception as e:
+                controller.log_manager.error(f"Failed to process KLAAR_GEWEEG flag file: {e}")
+                import traceback
+                controller.log_manager.error(traceback.format_exc())
+
+
 class CommsAcknowledgeRule(Rule):
     """Acknowledge comms error when operator turns Auto_Select OFF (Manual mode)."""
 
@@ -427,7 +459,7 @@ class InitiateMoveC2toPalm(Rule):
             mem.mode() == 'READY' and
             procon.get('S1') and  # No bin on C3
             not procon.get('S2') and  # Bin present on C2
-            procon.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
+            mem.get('KLAAR_GEWEEG') and  # Flag set via API
             procon.get('PALM_Run_Signal')  # PALM ready
         )
 
@@ -436,6 +468,8 @@ class InitiateMoveC2toPalm(Rule):
         if not mem.mode().startswith('ERROR_'):
             procon.set('MOTOR_2', True)
             mem.set_mode('MOVING_C2_TO_PALM')
+            # Reset flag after starting move
+            mem.set('KLAAR_GEWEEG', False)
             controller.log_manager.info_once("Started MOVING_C2_TO_PALM - MOTOR_2 running")
 
 
@@ -478,13 +512,15 @@ class InitiateMoveBoth(Rule):
             mem.mode() == 'READY' and
             not procon.get('S1') and  # Bin present on C3
             not procon.get('S2') and  # Bin present on C2
-            procon.rising_edge('Klaar_Geweeg_Btn') and  # Button press detected (edge)
+            mem.get('KLAAR_GEWEEG') and  # Flag set via API
             procon.get('PALM_Run_Signal')  # PALM ready
         )
 
     def action(self, controller, procon, mem):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
         mem.set_mode('MOVING_BOTH')
+        # Reset flag after starting move
+        mem.set('KLAAR_GEWEEG', False)
 
         # Start MOTOR_2 immediately
         procon.set('MOTOR_2', True)
@@ -634,6 +670,9 @@ def setup_rules(rule_engine):
     Args:
         rule_engine: RuleEngine instance
     """
+    # =====  Flag File Check (runs first) =====
+    rule_engine.add_rule(KlaarGeweegFlagRule())        # Check for KLAAR_GEWEEG flag file and set memory
+
     # =====  Communications Monitoring =====
     rule_engine.add_rule(CommsHealthCheckRule())       # Monitor comms health continuously
     rule_engine.add_rule(CommsAcknowledgeRule())       # Acknowledge comms failure (switch OFF)

@@ -91,10 +91,19 @@ class WebDashboard:
         @self.app.post("/tipbins")
         async def set_klaar_geweeg():
             """POST endpoint to set klaar_geweeg state to true."""
-            with self.shared_state.lock:
-                self.shared_state.klaar_geweeg = True
-            self.log_manager.info("klaar_geweeg set to True via API")
-            return {"success": True, "klaar_geweeg": True}
+            import tempfile
+            import os
+
+            # Create a flag file to signal the polling thread
+            flag_file = os.path.join(tempfile.gettempdir(), 'bellafruita_klaar_geweeg.flag')
+            try:
+                with open(flag_file, 'w') as f:
+                    f.write('1')
+                self.log_manager.info(f"Created KLAAR_GEWEEG flag file: {flag_file}")
+                return {"success": True, "klaar_geweeg": True}
+            except Exception as e:
+                self.log_manager.error(f"Failed to create KLAAR_GEWEEG flag file: {e}")
+                return {"success": False, "error": str(e)}
 
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
