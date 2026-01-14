@@ -235,6 +235,19 @@ def main():
             # Web dashboard mode
             from src.web_server import run_web_dashboard
             controller.log_manager.info(f"Starting in WEB mode on port {args.port}")
+
+            # Start mock control server if in mock mode
+            if config.use_mock:
+                import threading
+                from src.mock_control_server import run_mock_control_server
+                mock_thread = threading.Thread(
+                    target=run_mock_control_server,
+                    args=(controller.input_client, controller.output_client, controller.log_manager, 7682),
+                    daemon=True,
+                    name="MockControlServer"
+                )
+                mock_thread.start()
+
             run_web_dashboard(shared_state, controller.log_manager, config, port=args.port)
 
         elif args.view == 'logs':

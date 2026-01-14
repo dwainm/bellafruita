@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Control Panel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            padding: 15px;
+        }
+        .header {
+            background: #1a1a1a;
+            border: 2px solid #ff9800;
+            padding: 15px 20px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .header h1 { color: #ff9800; font-size: 24px; }
+        .header .subtitle { color: #888; font-size: 14px; margin-top: 5px; }
+        .panel {
+            background: #1a1a1a;
+            border: 2px solid #00aaff;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .panel-title {
+            color: #ffaa00;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .input-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 10px;
+        }
+        .input-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 15px;
+            background: #2a2a2a;
+            border-radius: 4px;
+        }
+        .input-info { flex: 1; }
+        .input-label { color: #00d9ff; font-weight: bold; font-size: 14px; }
+        .input-description { color: #888; font-size: 12px; margin-top: 2px; }
+        .input-address { color: #666; font-size: 10px; }
+        .toggle-switch {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            margin-left: 15px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #444;
+            transition: 0.3s;
+            border-radius: 30px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px; width: 22px;
+            left: 4px; bottom: 4px;
+            background-color: #888;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider { background-color: #4caf50; }
+        input:checked + .toggle-slider:before {
+            transform: translateX(30px);
+            background-color: #fff;
+        }
+        .toggle-state {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            top: 35px;
+            font-size: 10px;
+            color: #888;
+        }
+        .register-panel { border-color: #ff9800; }
+        .register-input-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .register-input-group label { color: #00d9ff; font-weight: bold; }
+        .register-input-group input[type="number"] {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #4caf50;
+            padding: 8px 12px;
+            font-size: 16px;
+            font-family: 'Courier New', monospace;
+            width: 150px;
+            border-radius: 4px;
+        }
+        .register-input-group input[type="number"]:focus {
+            outline: none;
+            border-color: #00aaff;
+        }
+        .register-input-group button {
+            background: #00aaff;
+            color: #000;
+            border: none;
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .register-input-group button:hover { background: #00d9ff; }
+        .status-bar {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+        .status-bar a { color: #00aaff; text-decoration: none; }
+        .status-bar a:hover { text-decoration: underline; }
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .quick-actions button {
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .quick-actions button:hover {
+            background: #3a3a3a;
+            border-color: #00aaff;
+        }
+        .quick-actions button.danger { border-color: #f44336; }
+        .quick-actions button.danger:hover { background: #f44336; color: #fff; }
+        .quick-actions button.action { border-color: #4caf50; }
+        .quick-actions button.action:hover { background: #4caf50; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Mock Control Panel</h1>
+        <div class="subtitle">Simulate hardware inputs for testing</div>
+    </div>
+
+    <div class="status-bar">
+        <span>Mock Control Server (port 7682)</span>
+        <a href="http://localhost:7681" target="_blank">Open Main Dashboard (port 7681)</a>
+    </div>
+
+    <div class="quick-actions">
+        <button onclick="setHealthyDefaults()">Healthy Defaults</button>
+        <button onclick="setupC3toC2()">Setup C3→C2</button>
+        <button onclick="setupC2toPalm()">Setup C2→PALM (no geweeg)</button>
+        <button onclick="setupMoveBoth()">Setup Move Both (no geweeg)</button>
+        <button onclick="sendKlaarGeweeg()" class="action">Klaar Geweeg</button>
+        <button onclick="simulateEStop()" class="danger">Simulate E-STOP</button>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">Input Coils (1-16)</div>
+        <div id="inputs-container" class="input-grid">
+            <div style="color: #666;">Loading inputs...</div>
+        </div>
+    </div>
+
+    <div class="panel register-panel">
+        <div class="panel-title">VERSION Register</div>
+        <div class="register-input-group">
+            <label>REG0 (VERSION):</label>
+            <input type="number" id="version-input" value="12345" min="0" max="65535">
+            <button onclick="setVersionRegister()">Set</button>
+        </div>
+    </div>
+
+    <script>
+        let inputStates = {};
+
+        async function loadInputs() {
+            try {
+                const response = await fetch('/api/inputs');
+                const data = await response.json();
+                renderInputs(data.inputs);
+            } catch (error) {
+                document.getElementById('inputs-container').innerHTML =
+                    '<div style="color: #f44336;">Error loading inputs</div>';
+            }
+        }
+
+        function renderInputs(inputs) {
+            const container = document.getElementById('inputs-container');
+            container.innerHTML = inputs.map(input => {
+                inputStates[input.input_number] = input.state;
+                return `
+                    <div class="input-item">
+                        <div class="input-info">
+                            <div class="input-label">${input.label}</div>
+                            <div class="input-description">${input.description}</div>
+                            <div class="input-address">Input #${input.input_number} (addr: ${input.address})</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox"
+                                   id="input-${input.input_number}"
+                                   ${input.state ? 'checked' : ''}
+                                   onchange="toggleInput(${input.input_number}, this.checked)">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-state" id="state-${input.input_number}">${input.state ? 'ON' : 'OFF'}</span>
+                        </label>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function toggleInput(inputNumber, value) {
+            try {
+                const response = await fetch(`/api/inputs/${inputNumber}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({value: value})
+                });
+                if (response.ok) {
+                    inputStates[inputNumber] = value;
+                    document.getElementById(`state-${inputNumber}`).textContent = value ? 'ON' : 'OFF';
+                } else {
+                    document.getElementById(`input-${inputNumber}`).checked = !value;
+                }
+            } catch (error) {
+                document.getElementById(`input-${inputNumber}`).checked = !value;
+            }
+        }
+
+        async function setVersionRegister() {
+            const value = parseInt(document.getElementById('version-input').value) || 0;
+            await fetch('/api/registers/version', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({value: value})
+            });
+        }
+
+        async function sendKlaarGeweeg() {
+            try {
+                await fetch('http://localhost:7681/tipbins', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+            } catch (error) {
+                console.error('Failed to send Klaar Geweeg:', error);
+            }
+        }
+
+        async function setHealthyDefaults() {
+            // Healthy states for normal operation
+            const healthyStates = {
+                1: true,   // S1 - no crate
+                2: true,   // S2 - no crate
+                3: false,  // CS1
+                4: false,  // CS2
+                5: false,  // CS3
+                6: true,   // M1_Trip - OK
+                7: true,   // M2_Trip - OK
+                8: true,   // E_Stop - OK (not pressed)
+                9: false,  // Manual_Select
+                10: true,  // Auto_Select
+                11: false, // UNUSED
+                12: false, // CPS_1
+                13: false, // CPS_2
+                14: false, // Reset_Btn
+                15: false, // PALM_Run_Signal
+                16: true,  // DHLM_Trip_Signal - OK
+            };
+            for (const [num, state] of Object.entries(healthyStates)) {
+                await toggleInput(parseInt(num), state);
+                document.getElementById(`input-${num}`).checked = state;
+            }
+        }
+
+        async function simulateEStop() {
+            await toggleInput(8, false);
+            document.getElementById('input-8').checked = false;
+        }
+
+        // Setup C3→C2: bin on C3, no bin on C2
+        async function setupC3toC2() {
+            const states = {
+                1: false,  // S1 - bin on C3
+                2: true,   // S2 - no bin on C2
+                6: true,   // M1_Trip - OK
+                7: true,   // M2_Trip - OK
+                8: true,   // E_Stop - OK
+                9: false,  // Manual_Select
+                10: true,  // Auto_Select
+                15: true,  // PALM_Run_Signal
+                16: true,  // DHLM_Trip_Signal - OK
+            };
+            for (const [num, state] of Object.entries(states)) {
+                await toggleInput(parseInt(num), state);
+                document.getElementById(`input-${num}`).checked = state;
+            }
+        }
+
+        // Setup C2→PALM: no bin on C3, bin on C2, PALM ready (no geweeg - press Klaar Geweeg to trigger)
+        async function setupC2toPalm() {
+            const states = {
+                1: true,   // S1 - no bin on C3
+                2: false,  // S2 - bin on C2
+                6: true,   // M1_Trip - OK
+                7: true,   // M2_Trip - OK
+                8: true,   // E_Stop - OK
+                9: false,  // Manual_Select
+                10: true,  // Auto_Select
+                15: true,  // PALM_Run_Signal - ready
+                16: true,  // DHLM_Trip_Signal - OK
+            };
+            for (const [num, state] of Object.entries(states)) {
+                await toggleInput(parseInt(num), state);
+                document.getElementById(`input-${num}`).checked = state;
+            }
+        }
+
+        // Setup Move Both: bin on C3, bin on C2, PALM ready (no geweeg - press Klaar Geweeg to trigger)
+        async function setupMoveBoth() {
+            const states = {
+                1: false,  // S1 - bin on C3
+                2: false,  // S2 - bin on C2
+                6: true,   // M1_Trip - OK
+                7: true,   // M2_Trip - OK
+                8: true,   // E_Stop - OK
+                9: false,  // Manual_Select
+                10: true,  // Auto_Select
+                15: true,  // PALM_Run_Signal - ready
+                16: true,  // DHLM_Trip_Signal - OK
+            };
+            for (const [num, state] of Object.entries(states)) {
+                await toggleInput(parseInt(num), state);
+                document.getElementById(`input-${num}`).checked = state;
+            }
+        }
+
+        async function loadVersionRegister() {
+            try {
+                const response = await fetch('/api/registers/version');
+                const data = await response.json();
+                document.getElementById('version-input').value = data.value;
+            } catch (error) {}
+        }
+
+        function startAutoRefresh() {
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/api/inputs');
+                    const data = await response.json();
+                    data.inputs.forEach(input => {
+                        const checkbox = document.getElementById(`input-${input.input_number}`);
+                        const stateLabel = document.getElementById(`state-${input.input_number}`);
+                        if (checkbox && inputStates[input.input_number] !== input.state) {
+                            checkbox.checked = input.state;
+                            stateLabel.textContent = input.state ? 'ON' : 'OFF';
+                            inputStates[input.input_number] = input.state;
+                        }
+                    });
+                } catch (error) {}
+            }, 2000);
+        }
+
+        loadInputs();
+        loadVersionRegister();
+        startAutoRefresh();
+    </script>
+</body>
+</html>

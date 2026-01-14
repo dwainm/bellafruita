@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pathlib import Path
 
@@ -31,6 +32,15 @@ class WebDashboard:
         self.config = config
         self.port = port
         self.app = FastAPI(title="Bella Fruita Dashboard")
+
+        # Allow CORS for mock control server (only in mock mode)
+        if config.use_mock:
+            self.app.add_middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
 
         # Setup routes
         self._setup_routes()
