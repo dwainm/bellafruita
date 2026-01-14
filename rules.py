@@ -21,7 +21,20 @@ Order matters - add safety rules LAST to ensure they can override normal operati
 
 from src.rule_engine import Rule
 from threading import Timer
+import tempfile
+import os
 import time
+
+
+def clear_klaar_geweeg(mem):
+    """Clear KLAAR_GEWEEG flag from memory and delete flag file if exists."""
+    mem.set('KLAAR_GEWEEG', False)
+    flag_file = os.path.join(tempfile.gettempdir(), 'bellafruita_klaar_geweeg.flag')
+    if os.path.exists(flag_file):
+        try:
+            os.remove(flag_file)
+        except Exception:
+            pass
 
 
 class CommsHealthCheckRule(Rule):
@@ -86,9 +99,6 @@ class KlaarGeweegFlagRule(Rule):
 
     def action(self, controller, procon, mem):
         """Check for flag file and set KLAAR_GEWEEG in memory if present."""
-        import tempfile
-        import os
-
         flag_file = os.path.join(tempfile.gettempdir(), 'bellafruita_klaar_geweeg.flag')
         if os.path.exists(flag_file):
             try:
@@ -207,6 +217,7 @@ class ManualModeRule(Rule):
         """Set mode to MANUAL and stop motors."""
         procon.set('MOTOR_2', False)
         procon.set('MOTOR_3', False)
+        clear_klaar_geweeg(mem)
         mem.set_mode('MANUAL')
 
 
