@@ -19,7 +19,7 @@ class EdgeDetectorDict(dict):
 
     Example:
         # In a rule condition:
-        if data.rising_edge('Klaar_Geweeg_Btn'):  # Detects button press
+        if data.rising_edge('E_Stop'):  # Detects button press
             # This triggers even if button was only pressed for 50ms
             # and we're polling at 100ms intervals
     """
@@ -40,7 +40,7 @@ class EdgeDetectorDict(dict):
         """Detect rising edge (False->True transition) within time window.
 
         Args:
-            signal: Signal name to check (e.g., 'Klaar_Geweeg_Btn', 'S1')
+            signal: Signal name to check (e.g., 'E_Stop', 'S1')
             window_ms: Time window in milliseconds (uses default if not specified)
 
         Returns:

@@ -17,7 +17,7 @@ MODBUS_MAP = {
             7: {'label': 'E_Stop', 'description': 'Emergency Stop Button'},
             8: {'label': 'Manual_Select', 'description': 'Selector Switch Manual'},
             9: {'label': 'Auto_Select', 'description': 'Selector Switch Auto'},
-            10: {'label': 'Klaar_Geweeg_Btn', 'description': 'Klaar Geweeg Button (Ready Weighed)'},
+            10: {'label': 'UNUSED_INPUT', 'description': 'Unused input'},
             11: {'label': 'CPS_1', 'description': 'Crate position sensor 1'},
             12: {'label': 'CPS_2', 'description': 'Crate position sensor 2'},
             13: {'label': 'Reset_Btn', 'description': 'System Reset Button'},

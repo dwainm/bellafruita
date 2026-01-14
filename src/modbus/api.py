@@ -283,7 +283,7 @@ class Procon:
         """Detect rising edge (False->True transition) within time window.
 
         Args:
-            label: Signal label to check (e.g., 'Klaar_Geweeg_Btn', 'S1')
+            label: Signal label to check (e.g., 'E_Stop', 'S1')
             window_ms: Time window in milliseconds (uses default if not specified)
 
         Returns:

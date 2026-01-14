@@ -35,7 +35,7 @@ static/          - Web assets
 **Modes**: READY, MOVING_C3_TO_C2, MOVING_C2_TO_PALM, MOVING_BOTH, MANUAL, ERROR_SAFETY, ERROR_ESTOP, ERROR_COMMS, ERROR_COMMS_ACK
 
 **I/O Labels** (io_mapping.py):
-- Inputs: S1, S2 (sensors), CS1-3 (crate), M1_Trip, M2_Trip, DHLM_Trip_Signal, E_Stop, Manual_Select, Auto_Select, Reset_Btn, PALM_Run_Signal, CPS_1, CPS_2, Klaar_Geweeg_Btn
+- Inputs: S1, S2 (sensors), CS1-3 (crate), M1_Trip, M2_Trip, DHLM_Trip_Signal, E_Stop, Manual_Select, Auto_Select, Reset_Btn, PALM_Run_Signal, CPS_1, CPS_2
 - Outputs: LED_GREEN, MOTOR_2, MOTOR_3, LED_RED
 
 **Rules Pattern**: Each rule has `evaluate(procon, mem, io_state)` returning dict of outputs. Safety rules last = highest priority.
