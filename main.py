@@ -194,10 +194,15 @@ def main():
         default=7681,
         help='Port for web server (only used with --view web, default: 7681)'
     )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug logging for rule conditions'
+    )
     args = parser.parse_args()
 
     # Create configuration
-    config = AppConfig.create_default(use_mock=args.mock)
+    config = AppConfig.create_default(use_mock=args.mock, debug=args.debug)
 
     # Create controller
     controller = ConveyorController(config)
@@ -212,7 +217,7 @@ def main():
 
     # Setup rules from rules.py
     from rules import setup_rules
-    setup_rules(rule_engine)
+    setup_rules(rule_engine, debug=config.debug)
 
     # Create shared state for thread-safe communication
     shared_state = SystemState()

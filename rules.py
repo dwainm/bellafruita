@@ -461,18 +461,22 @@ class CompleteMoveC3toC2(Rule):
 class InitiateMoveC2toPalm(Rule):
     """Start C2→PALM move: single bin from C2 to PALM."""
 
-    def __init__(self):
+    def __init__(self, debug=False):
         super().__init__("Initiate Move C2→PALM")
+        self.debug = debug
 
     def condition(self, procon, mem):
         """Check if C2→PALM move should start."""
-        return (
-            mem.mode() == 'READY' and
-            procon.get('S1') and  # No bin on C3
-            not procon.get('S2') and  # Bin present on C2
-            mem.get('KLAAR_GEWEEG') and  # Flag set via API
-            procon.get('PALM_Run_Signal')  # PALM ready
-        )
+        mode_ready = mem.mode() == 'READY'
+        s1 = procon.get('S1')  # No bin on C3
+        s2 = procon.get('S2')  # Bin present on C2 when False
+        klaar = mem.get('KLAAR_GEWEEG')
+        palm = procon.get('PALM_Run_Signal')
+
+        if self.debug and klaar:
+            print(f"[DEBUG C2→PALM] mode={mem.mode()} S1={s1} S2={s2} KLAAR={klaar} PALM={palm}")
+
+        return mode_ready and s1 and not s2 and klaar and palm
 
     def action(self, controller, procon, mem):
         """Start MOTOR_2 and set mode to MOVING_C2_TO_PALM."""
@@ -514,18 +518,22 @@ class CompleteMoveC2toPalm(Rule):
 class InitiateMoveBoth(Rule):
     """Start moving both bins simultaneously."""
 
-    def __init__(self):
+    def __init__(self, debug=False):
         super().__init__("Initiate Move Both")
+        self.debug = debug
 
     def condition(self, procon, mem):
         """Check if both bins move should start."""
-        return (
-            mem.mode() == 'READY' and
-            not procon.get('S1') and  # Bin present on C3
-            not procon.get('S2') and  # Bin present on C2
-            mem.get('KLAAR_GEWEEG') and  # Flag set via API
-            procon.get('PALM_Run_Signal')  # PALM ready
-        )
+        mode_ready = mem.mode() == 'READY'
+        s1 = procon.get('S1')  # No bin on C3 when True
+        s2 = procon.get('S2')  # No bin on C2 when True
+        klaar = mem.get('KLAAR_GEWEEG')
+        palm = procon.get('PALM_Run_Signal')
+
+        if self.debug and klaar:
+            print(f"[DEBUG MoveBoth] mode={mem.mode()} S1={s1} S2={s2} KLAAR={klaar} PALM={palm}")
+
+        return mode_ready and not s1 and not s2 and klaar and palm
 
     def action(self, controller, procon, mem):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
@@ -668,7 +676,7 @@ class EmergencyStopResetRule(Rule):
 
 
 # Function to create all rules and add to engine
-def setup_rules(rule_engine):
+def setup_rules(rule_engine, debug=False):
     """Add all rules to the rule engine.
 
     LADDER LOGIC ORDER (like PLC rungs):
@@ -680,6 +688,7 @@ def setup_rules(rule_engine):
 
     Args:
         rule_engine: RuleEngine instance
+        debug: Enable debug logging for move rules
     """
     # =====  Flag File Check (runs first) =====
     rule_engine.add_rule(KlaarGeweegFlagRule())        # Check for KLAAR_GEWEEG flag file and set memory
@@ -710,11 +719,11 @@ def setup_rules(rule_engine):
     rule_engine.add_rule(CompleteMoveC3toC2())         # Complete when S2 becomes true
 
     # C2→PALM operation (single bin from C2 to PALM)
-    rule_engine.add_rule(InitiateMoveC2toPalm())       # Start C2→PALM move on button
+    rule_engine.add_rule(InitiateMoveC2toPalm(debug=debug))       # Start C2→PALM move on button
     rule_engine.add_rule(CompleteMoveC2toPalm())       # Complete when S2 becomes false
 
     # Both bins operation (C3→C2 and C2→PALM simultaneously)
-    rule_engine.add_rule(InitiateMoveBoth())           # Start both bins move on button
+    rule_engine.add_rule(InitiateMoveBoth(debug=debug))           # Start both bins move on button
     rule_engine.add_rule(StartMovingMotor3AfterDelay())         # start moving motar 3 after delay
     rule_engine.add_rule(CompleteMoveBoth())           # Complete with 2s delay for MOTOR_2
 

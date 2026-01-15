@@ -39,13 +39,15 @@ class AppConfig:
     tui: TUIConfig
     site_name: str = "Bella Fruita"
     use_mock: bool = False
+    debug: bool = False
 
     @classmethod
-    def create_default(cls, use_mock: bool = False) -> 'AppConfig':
+    def create_default(cls, use_mock: bool = False, debug: bool = False) -> 'AppConfig':
         """Create default configuration.
 
         Args:
             use_mock: Run in mock mode for testing
+            debug: Enable debug logging for rule conditions
 
         Returns:
             AppConfig instance with default settings
@@ -54,5 +56,6 @@ class AppConfig:
             modbus=ModbusConfig(),
             system=SystemConfig(),
             tui=TUIConfig(),
-            use_mock=use_mock
+            use_mock=use_mock,
+            debug=debug
         )
