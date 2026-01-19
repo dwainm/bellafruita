@@ -471,7 +471,7 @@ class InitiateMoveC2toPalm(Rule):
         s1 = procon.get('S1')  # No bin on C3
         s2 = procon.get('S2')  # Bin present on C2 when False
         klaar = mem.get('KLAAR_GEWEEG')
-        palm = procon.get('PALM_Run_Signal')
+        palm = procon.extended_hold('PALM_Run_Signal', True, 2.0)  # PALM running for 2+ seconds
 
         if self.debug and klaar:
             print(f"[DEBUG C2→PALM] mode={mem.mode()} S1={s1} S2={s2} KLAAR={klaar} PALM={palm}")
@@ -528,7 +528,7 @@ class InitiateMoveBoth(Rule):
         s1 = procon.get('S1')  # No bin on C3 when True
         s2 = procon.get('S2')  # No bin on C2 when True
         klaar = mem.get('KLAAR_GEWEEG')
-        palm = procon.get('PALM_Run_Signal')
+        palm = procon.extended_hold('PALM_Run_Signal', True, 2.0)  # PALM running for 2+ seconds
 
         if self.debug and klaar:
             print(f"[DEBUG MoveBoth] mode={mem.mode()} S1={s1} S2={s2} KLAAR={klaar} PALM={palm}")
