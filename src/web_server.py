@@ -175,39 +175,32 @@ class WebDashboard:
                 "total": len(logs),
             }
 
-        @self.app.post("/api/test/flood")
-        async def flood_logs(count: int = 100, delay_ms: int = 50):
-            """Inject test events to watch UI update in real-time.
+        if self.config.use_mock:
+            @self.app.post("/api/test/flood")
+            async def flood_logs(count: int = 100, delay_ms: int = 50):
+                """Inject test events to watch UI update in real-time (mock mode only)."""
+                import asyncio
+                import random
 
-            Args:
-                count: Number of events to generate (default 100)
-                delay_ms: Delay between events in milliseconds (default 50)
+                messages = [
+                    "Mode: READY -> MOVING_C3_TO_C2",
+                    "Mode: MOVING_C3_TO_C2 -> READY",
+                    "Started MOVING_C2_TO_PALM - MOTOR_2 running",
+                    "MOTOR_2 stopped after 1s delay",
+                    "Motor 3 started after 2 second delay",
+                    "Completed MOVING_C3_TO_C2 - both motors stopped",
+                    "KLAAR_GEWEEG flag set via API",
+                    "Bin detected on S1",
+                ]
+                levels = ['INFO', 'INFO', 'INFO', 'WARNING']
 
-            Usage:
-                curl -X POST "http://localhost:7681/api/test/flood?count=50&delay_ms=100"
-            """
-            import asyncio
-            import random
+                for i in range(count):
+                    level = random.choice(levels)
+                    msg = f"[Test {i+1}/{count}] {random.choice(messages)}"
+                    self.log_manager.log_event(level, msg)
+                    await asyncio.sleep(delay_ms / 1000.0)
 
-            messages = [
-                "Mode: READY -> MOVING_C3_TO_C2",
-                "Mode: MOVING_C3_TO_C2 -> READY",
-                "Started MOVING_C2_TO_PALM - MOTOR_2 running",
-                "MOTOR_2 stopped after 1s delay",
-                "Motor 3 started after 2 second delay",
-                "Completed MOVING_C3_TO_C2 - both motors stopped",
-                "KLAAR_GEWEEG flag set via API",
-                "Bin detected on S1",
-            ]
-            levels = ['INFO', 'INFO', 'INFO', 'WARNING']
-
-            for i in range(count):
-                level = random.choice(levels)
-                msg = f"[Test {i+1}/{count}] {random.choice(messages)}"
-                self.log_manager.log_event(level, msg)
-                await asyncio.sleep(delay_ms / 1000.0)
-
-            return {"success": True, "generated": count}
+                return {"success": True, "generated": count}
 
         @self.app.post("/tipbins")
         async def set_klaar_geweeg():

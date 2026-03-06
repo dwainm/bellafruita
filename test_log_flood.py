@@ -165,7 +165,7 @@ def main():
 
     # Force rotation check
     print("\nChecking rotation...")
-    log_manager.rotate_log_file()
+    log_manager.cleanup_old_entries()
 
     # Show results
     check_log_files(log_dir)
