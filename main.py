@@ -36,8 +36,7 @@ class ConveyorController:
         debug_mode = os.environ.get('DEBUG', '0') == '1'
         self.log_manager = LogManager(
             max_entries=config.system.log_stack_size,
-            debug_mode=debug_mode,
-            retention_days=config.system.log_retention_days
+            debug_mode=debug_mode
         )
         self.procon = Procon(
             self.input_client,

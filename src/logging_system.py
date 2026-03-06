@@ -39,18 +39,15 @@ class EventEntry:
 class LogManager:
     """Manages log stacks for Modbus devices."""
 
-    def __init__(self, max_entries: int = 3000, log_file: Optional[str] = None,
-                 debug_mode: bool = False, retention_days: int = 7):
+    def __init__(self, max_entries: int = 3000, log_file: Optional[str] = None, debug_mode: bool = False):
         """Initialize log manager.
 
         Args:
             max_entries: Maximum number of log entries to keep per device
             log_file: Path to persistent log file (default: logs/system_events.jsonl)
             debug_mode: Enable debug logging (default: False)
-            retention_days: Delete rotated log files older than this many days
         """
         self.max_entries = max_entries
-        self.retention_days = retention_days
         self.input_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.output_logs: deque[LogEntry] = deque(maxlen=max_entries)
         self.event_logs: deque[EventEntry] = deque(maxlen=max_entries)
@@ -64,9 +61,6 @@ class LogManager:
 
         # Create logs directory if it doesn't exist
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Clean up old rotated log files on startup
-        self._cleanup_old_log_files()
 
         # Load existing logs from file
         self._load_logs_from_file()
@@ -341,14 +335,15 @@ class LogManager:
     def rotate_log_file(self) -> None:
         """Rotate log file if it gets too large.
 
-        Rotates current file to a timestamped backup (e.g., system_events.2026-03-06.jsonl).
-        Old rotated files beyond retention_days are deleted.
+        Creates a new file and deletes the old backup, keeping only 2 files at a time:
+        - system_events.jsonl (current)
+        - system_events.jsonl.old (previous rotation)
         """
         if not self.log_file.exists():
             return
 
         try:
-            # Check line count
+            # Check file size or line count
             line_count = 0
             with open(self.log_file, 'r') as f:
                 for _ in f:
@@ -356,52 +351,21 @@ class LogManager:
 
             # Only rotate if we've exceeded max_entries
             if line_count <= self.max_entries:
-                # Still clean up old files periodically
-                self._cleanup_old_log_files()
                 return
 
-            # Create timestamped backup filename (e.g., system_events.2026-03-06.jsonl)
-            from datetime import datetime
-            date_str = datetime.now().strftime('%Y-%m-%d')
-            base_name = self.log_file.stem  # system_events
-            backup_name = f"{base_name}.{date_str}.jsonl"
-            backup_file = self.log_file.parent / backup_name
+            # Define backup file path
+            backup_file = Path(str(self.log_file) + '.old')
 
-            # If backup for today already exists, append a counter
-            counter = 1
-            while backup_file.exists():
-                backup_name = f"{base_name}.{date_str}.{counter}.jsonl"
-                backup_file = self.log_file.parent / backup_name
-                counter += 1
+            # Delete old backup if it exists
+            if backup_file.exists():
+                backup_file.unlink()
 
             # Rename current file to backup
             self.log_file.rename(backup_file)
 
-            # Clean up old rotated files
-            self._cleanup_old_log_files()
-
             # New file will be created automatically on next log write
+            # (by _append_log_to_file)
 
-        except Exception:
+        except Exception as e:
             # Silently fail - don't crash if rotation fails
-            pass
-
-    def _cleanup_old_log_files(self) -> None:
-        """Delete rotated log files older than retention_days."""
-        try:
-            cutoff_time = time.time() - (self.retention_days * 86400)
-            log_dir = self.log_file.parent
-
-            # Find all rotated log files (system_events.YYYY-MM-DD*.jsonl)
-            for path in log_dir.glob("system_events.*.jsonl"):
-                # Skip the current log file
-                if path == self.log_file:
-                    continue
-
-                # Check file modification time
-                if path.stat().st_mtime < cutoff_time:
-                    path.unlink()
-
-        except Exception:
-            # Silently fail - don't crash if cleanup fails
             pass
