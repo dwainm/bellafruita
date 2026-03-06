@@ -111,6 +111,31 @@
             margin-bottom: 15px;
         }
 
+        .panel-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .panel-title-row .panel-title {
+            margin-bottom: 0;
+        }
+
+        .more-button {
+            background: #2a2a2a;
+            border: 1px solid #00aaff;
+            color: #e0e0e0;
+            padding: 6px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .more-button:hover {
+            background: #00aaff;
+            color: #000;
+        }
+
         /* I/O Grid Layout (3 columns like TUI) */
         .io-grid {
             display: grid;
@@ -260,6 +285,79 @@
             margin-top: 4px;
         }
 
+        .log-reader-overlay {
+            position: fixed;
+            inset: 0;
+            background: #0a0a0a;
+            z-index: 999;
+            display: none;
+            padding: 15px;
+        }
+
+        .log-reader-overlay.open {
+            display: block;
+        }
+
+        .log-reader-layout {
+            height: calc(100vh - 30px);
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 15px;
+        }
+
+        .log-reader-files,
+        .log-reader-content {
+            background: #1a1a1a;
+            border: 2px solid #00aaff;
+            padding: 12px;
+            overflow-y: auto;
+        }
+
+        .log-reader-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .log-file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .log-file-item {
+            border: 1px solid #333;
+            background: #222;
+            color: #ddd;
+            text-align: left;
+            padding: 8px;
+            cursor: pointer;
+        }
+
+        .log-file-item.active {
+            border-color: #ffaa00;
+            background: #2d2a1f;
+        }
+
+        .log-file-meta {
+            color: #888;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .log-reader-title {
+            color: #00d9ff;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 900px) {
+            .log-reader-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .no-data {
             color: #666;
             font-style: italic;
@@ -369,9 +467,36 @@
 
     <!-- System Log Panel -->
     <div class="panel log-panel">
-        <div class="panel-title">System Log</div>
+        <div class="panel-title-row">
+            <div class="panel-title">System Log</div>
+            <button class="more-button" onclick="openLogReader()">More</button>
+        </div>
         <div id="system-log">
             <div class="no-data">Loading logs...</div>
+        </div>
+    </div>
+
+    <div id="log-reader-overlay" class="log-reader-overlay">
+        <div class="log-reader-layout">
+            <div class="log-reader-files">
+                <div class="log-reader-header">
+                    <div class="log-reader-title">Log Files</div>
+                    <button class="more-button" onclick="refreshLogFiles()">Refresh</button>
+                </div>
+                <div id="log-file-list" class="log-file-list">
+                    <div class="no-data">Loading files...</div>
+                </div>
+            </div>
+
+            <div class="log-reader-content">
+                <div class="log-reader-header">
+                    <div id="log-reader-file-title" class="log-reader-title">Select a log file</div>
+                    <button class="more-button" onclick="closeLogReader()">Back</button>
+                </div>
+                <div id="log-reader-entries">
+                    <div class="no-data">No file selected</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -383,6 +508,9 @@
         let lastRulesJson = '';
         let lastStateJson = '';
         let lastLogTimestamp = '';
+        let lastLogCount = 0;
+        let lastLogDate = '';
+        let currentLogFile = '';
 
         async function loadConfig() {
             try {
@@ -613,27 +741,17 @@
                 const response = await fetch('/api/logs');
                 const data = await response.json();
 
-                if (data.logs && data.logs.length > 0) {
-                    // Check if newest log changed (last item after reverse = first item)
-                    const newestTimestamp = data.logs[data.logs.length - 1]?.timestamp || '';
-                    if (newestTimestamp === lastLogTimestamp) return;
-                    lastLogTimestamp = newestTimestamp;
-
-                    const html = data.logs.slice(-1000).reverse().map(log => {
-                        return `
-                            <div class="log-entry">
-                                <span class="log-timestamp">${log.timestamp || ''}</span>
-                                <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
-                                <span class="log-message">${log.message || ''}</span>
-                            </div>
-                        `;
-                    }).join('');
+                if (!data.logs || data.logs.length === 0) {
+                    return;
+                }
 
                 // Skip DOM update if nothing has changed
                 const newCount = data.total || data.logs.length;
+                const newestTimestamp = data.logs[data.logs.length - 1]?.timestamp || '';
                 const newestDate = data.logs[data.logs.length - 1]?.datetime || '';
-                if (newCount === lastLogCount && newestDate === lastLogDate) return;
+                if (newCount === lastLogCount && newestTimestamp === lastLogTimestamp && newestDate === lastLogDate) return;
                 lastLogCount = newCount;
+                lastLogTimestamp = newestTimestamp;
                 lastLogDate = newestDate;
 
                 const logPanel = document.getElementById('system-log').closest('.log-panel');
@@ -663,6 +781,105 @@
             }
         }
 
+        function formatBytes(bytes) {
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        function openLogReader() {
+            document.getElementById('log-reader-overlay').classList.add('open');
+            refreshLogFiles();
+        }
+
+        function closeLogReader() {
+            document.getElementById('log-reader-overlay').classList.remove('open');
+        }
+
+        async function refreshLogFiles() {
+            const listEl = document.getElementById('log-file-list');
+            listEl.innerHTML = '<div class="no-data">Loading files...</div>';
+
+            try {
+                const response = await fetch('/api/log-files');
+                const data = await response.json();
+                const files = data.files || [];
+
+                if (files.length === 0) {
+                    listEl.innerHTML = '<div class="no-data">No log files found</div>';
+                    return;
+                }
+
+                const html = files.map(file => {
+                    const currentTag = file.is_current ? ' (current)' : '';
+                    const activeClass = file.name === currentLogFile ? 'active' : '';
+                    return `
+                        <button class="log-file-item ${activeClass}" onclick="loadLogFile('${file.name.replace(/'/g, "\\'")}')">
+                            <div>${file.name}${currentTag}</div>
+                            <div class="log-file-meta">${formatBytes(file.size)}</div>
+                        </button>
+                    `;
+                }).join('');
+
+                listEl.innerHTML = html;
+
+                if (!currentLogFile) {
+                    loadLogFile(files[0].name);
+                }
+            } catch (error) {
+                listEl.innerHTML = '<div class="no-data">Failed to load log files</div>';
+                console.error('Failed to load log files:', error);
+            }
+        }
+
+        async function loadLogFile(filename) {
+            currentLogFile = filename;
+            document.getElementById('log-reader-file-title').textContent = filename;
+
+            // Refresh active highlight
+            const buttons = document.querySelectorAll('.log-file-item');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            buttons.forEach(btn => {
+                if (btn.textContent.includes(filename)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            const entriesEl = document.getElementById('log-reader-entries');
+            entriesEl.innerHTML = '<div class="no-data">Loading entries...</div>';
+
+            try {
+                const response = await fetch(`/api/log-files/${encodeURIComponent(filename)}`);
+                const data = await response.json();
+                const logs = data.logs || [];
+
+                if (logs.length === 0) {
+                    entriesEl.innerHTML = '<div class="no-data">No entries in this file</div>';
+                    return;
+                }
+
+                let currentDate = '';
+                const html = logs.slice().reverse().map(log => {
+                    let dateHeader = '';
+                    if (log.date && log.date !== currentDate) {
+                        currentDate = log.date;
+                        dateHeader = `<div class="log-date-header">${log.date}</div>`;
+                    }
+
+                    return `${dateHeader}<div class="log-entry">
+                        <span class="log-timestamp">${log.datetime || log.timestamp || ''}</span>
+                        <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
+                        <span class="log-message">${log.message || ''}</span>
+                    </div>`;
+                }).join('');
+
+                entriesEl.innerHTML = html;
+            } catch (error) {
+                entriesEl.innerHTML = '<div class="no-data">Failed to load file entries</div>';
+                console.error('Failed to load log file:', error);
+            }
+        }
+
         async function loadInitialState() {
             try {
                 console.log('Fetching initial state...');
@@ -681,9 +898,8 @@
             .then(() => loadInitialState())
             .then(() => {
                 connect();
-                // Fetch logs every second instead of on every WebSocket message
+                // Initial log fetch; periodic refresh is configured below
                 fetchLogs();
-                setInterval(fetchLogs, 1000);
             });
 
         // Refresh logs periodically

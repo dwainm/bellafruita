@@ -15,9 +15,67 @@ import argparse
 import requests
 import time
 import sys
+import threading
+import queue
 
 BASE_URL = "http://localhost:7682"
 MAIN_URL = "http://localhost:7681"
+
+# Match PLC rule timing thresholds so mock behavior is closer to production
+PALM_HOLD_SECONDS = 2.2      # rules.py: PALM_Run_Signal must hold 2s
+SAFETY_HOLD_SECONDS = 1.2    # rules.py: E_Stop/trip holds use 1s debounce
+ESTOP_DIVISOR = 500          # Roughly 1 E-Stop per 500 requested cycles
+ESTOP_MIN_CYCLES = 100       # For medium+ runs, force at least one E-Stop
+
+
+class RequestDispatcher:
+    """Send HTTP requests on a background thread to avoid main-loop stalls."""
+
+    def __init__(self):
+        self._queue: queue.Queue = queue.Queue(maxsize=2000)
+        self._stop = threading.Event()
+        self._session = requests.Session()
+        self._thread = threading.Thread(target=self._run, daemon=True, name="MockFloodRequestDispatcher")
+        self._thread.start()
+
+    def submit(self, method: str, url: str, json_data=None, timeout: float = 0.35):
+        """Queue a request for background execution."""
+        try:
+            self._queue.put((method, url, json_data, timeout), timeout=1.0)
+        except queue.Full:
+            print("  WARN: request queue full, dropping request")
+
+    def flush(self):
+        """Wait until queued requests are sent."""
+        self._queue.join()
+
+    def pending(self) -> int:
+        return self._queue.qsize()
+
+    def close(self):
+        """Stop dispatcher thread cleanly."""
+        self.flush()
+        self._stop.set()
+        self._queue.put((None, None, None, None))
+        self._thread.join(timeout=1.0)
+        self._session.close()
+
+    def _run(self):
+        while not self._stop.is_set():
+            method, url, json_data, timeout = self._queue.get()
+            if method is None:
+                self._queue.task_done()
+                break
+
+            try:
+                self._session.request(method=method, url=url, json=json_data, timeout=timeout)
+            except requests.exceptions.RequestException:
+                pass
+            finally:
+                self._queue.task_done()
+
+
+DISPATCHER = RequestDispatcher()
 
 
 def set_input(label: str, value: bool, delay: float = 0.1):
@@ -37,10 +95,10 @@ def set_input(label: str, value: bool, delay: float = 0.1):
         return
 
     try:
-        resp = requests.post(
-            f"{BASE_URL}/api/inputs/{input_num}",
-            json={"value": value},
-            timeout=1
+        DISPATCHER.submit(
+            method="POST",
+            url=f"{BASE_URL}/api/inputs/{input_num}",
+            json_data={"value": value},
         )
         status = "ON" if value else "OFF"
         print(f"  {label} = {status}")
@@ -53,7 +111,7 @@ def set_input(label: str, value: bool, delay: float = 0.1):
 def set_klaar_geweeg():
     """Trigger KLAAR_GEWEEG via API."""
     try:
-        requests.post(f"{MAIN_URL}/tipbins", timeout=1)
+        DISPATCHER.submit(method="POST", url=f"{MAIN_URL}/tipbins")
         print("  KLAAR_GEWEEG triggered")
     except:
         pass
@@ -86,8 +144,8 @@ def simulate_c2_to_palm_cycle(delay: float):
     set_input('S2', False, delay)  # Bin on C2
     set_input('PALM_Run_Signal', True, delay)  # PALM ready
 
-    # Wait for PALM hold time
-    time.sleep(delay * 5)
+    # Wait long enough to satisfy PALM 2s hold rule
+    time.sleep(max(delay * 5, PALM_HOLD_SECONDS))
 
     # Trigger move
     set_klaar_geweeg()
@@ -108,8 +166,8 @@ def simulate_both_bins_cycle(delay: float):
     set_input('S2', False, delay)  # Bin on C2
     set_input('PALM_Run_Signal', True, delay)
 
-    # Wait for PALM hold
-    time.sleep(delay * 5)
+    # Wait long enough to satisfy PALM 2s hold rule
+    time.sleep(max(delay * 5, PALM_HOLD_SECONDS))
 
     # Trigger move
     set_klaar_geweeg()
@@ -133,7 +191,8 @@ def simulate_estop(delay: float):
     # E-Stop pressed (active low - False means pressed)
     set_input('E_Stop', False, delay)
     print("  E-Stop PRESSED - waiting...")
-    time.sleep(delay * 5)  # Hold for a bit
+    # Hold long enough to satisfy 1s debounce in EmergencyStopRule
+    time.sleep(max(delay * 5, SAFETY_HOLD_SECONDS))
 
     # Release E-Stop
     set_input('E_Stop', True, delay)
@@ -172,7 +231,8 @@ def simulate_motor_trip(delay: float):
     # Motor 1 trips (active low - False means tripped)
     set_input('M1_Trip', False, delay)
     print("  M1 TRIPPED - waiting...")
-    time.sleep(delay * 5)
+    # Hold long enough to satisfy 1s debounce in ClearReadyRule
+    time.sleep(max(delay * 5, SAFETY_HOLD_SECONDS))
 
     # Clear the trip
     set_input('M1_Trip', True, delay)
@@ -227,13 +287,37 @@ def run_flood(cycles: int, delay: float):
 
     start_time = time.time()
 
+    # Plan sparse E-Stop injections: about cycles / ESTOP_DIVISOR, spread across the run
+    estop_count = cycles // ESTOP_DIVISOR
+    if cycles >= ESTOP_MIN_CYCLES:
+        estop_count = max(1, estop_count)
+    estop_cycles = set()
+    if estop_count > 0:
+        step = cycles / (estop_count + 1)
+        for n in range(estop_count):
+            idx = int(round((n + 1) * step)) - 1
+            idx = max(1, min(cycles - 1, idx))
+            estop_cycles.add(idx)
+
+    if estop_count > 0:
+        print(f"Planned E-Stop events: {estop_count} (~1 per {ESTOP_DIVISOR} cycles)")
+    else:
+        print(f"Planned E-Stop events: 0 (need >= {ESTOP_MIN_CYCLES} cycles for automatic E-Stop)")
+
     for i in range(cycles):
         print(f"\n{'='*40}")
         print(f"CYCLE {i+1}/{cycles}")
         print('='*40)
 
-        # Mix of different scenarios
-        scenario = i % 6
+        # Use E-Stop sparingly to keep turbo runs realistic and fast
+        if i in estop_cycles:
+            simulate_estop(delay)
+            if DISPATCHER.pending() > 500:
+                DISPATCHER.flush()
+            continue
+
+        # Mix of non-E-Stop scenarios
+        scenario = i % 5
 
         if scenario == 0:
             simulate_c3_to_c2_cycle(delay)
@@ -244,9 +328,11 @@ def run_flood(cycles: int, delay: float):
         elif scenario == 3:
             simulate_mode_switch(delay)
         elif scenario == 4:
-            simulate_estop(delay)
-        elif scenario == 5:
             simulate_motor_trip(delay)
+
+        # Backpressure: if queue grows too much, let sender catch up
+        if DISPATCHER.pending() > 500:
+            DISPATCHER.flush()
 
     elapsed = time.time() - start_time
     print(f"\n{'='*40}")
@@ -271,7 +357,10 @@ def main():
     if args.turbo:
         delay = 0.02
 
-    run_flood(args.cycles, delay)
+    try:
+        run_flood(args.cycles, delay)
+    finally:
+        DISPATCHER.close()
 
 
 if __name__ == '__main__':

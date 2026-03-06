@@ -214,6 +214,7 @@ class LogManager:
 
         Loads from all rotated log files within retention period, oldest first.
         """
+        cutoff = self._retention_cutoff()
         log_dir = self.log_file.parent
         base_name = self.log_file.stem  # system_events
 
@@ -222,19 +223,18 @@ class LogManager:
 
         # Load rotated files first (oldest to newest based on filename)
         for path in rotated_files:
-            self._load_single_log_file(path)
+            self._load_single_log_file(path, cutoff=cutoff)
 
         # Load legacy .old backup if it exists
         backup_file = Path(str(self.log_file) + '.old')
-        for path in [backup_file, self.log_file]:
-            if path.exists():
-                self._load_single_log_file(path, cutoff=cutoff)
+        if backup_file.exists():
+            self._load_single_log_file(backup_file, cutoff=cutoff)
 
         # Load current file last (newest)
         if self.log_file.exists():
-            self._load_single_log_file(self.log_file)
+            self._load_single_log_file(self.log_file, cutoff=cutoff)
 
-    def _load_single_log_file(self, file_path: Path) -> None:
+    def _load_single_log_file(self, file_path: Path, cutoff: float = 0.0) -> None:
         """Load logs from a single file.
 
         Args:
@@ -286,11 +286,13 @@ class LogManager:
     def cleanup_old_entries(self) -> None:
         """Remove entries older than retention_days from memory and disk.
 
-        Rotates current file to a timestamped backup (e.g., system_events.2026-03-06.jsonl).
-        Old rotated files beyond retention_days are deleted.
+        Keeps in-memory events within retention_days.
+        Rotates current log to a timestamped backup when max_entries is exceeded.
+        Deletes rotated files older than retention_days.
         """
         cutoff = self._retention_cutoff()
         now = time.time()
+        should_cleanup_files = (now - self._last_cleanup_time) >= 86400
 
         # Trim in-memory deque — rebuild without old entries
         fresh = [e for e in self.event_logs if e.timestamp >= cutoff]
@@ -298,33 +300,25 @@ class LogManager:
             self.event_logs.clear()
             self.event_logs.extend(fresh)
 
-        # Rewrite file once per day to remove old lines
-        if now - self._last_cleanup_time < 86400:
-            return
-        self._last_cleanup_time = now
-
         if not self.log_file.exists():
+            if should_cleanup_files:
+                self._cleanup_old_log_files()
+                self._last_cleanup_time = now
             return
 
         try:
             # Check line count
             line_count = 0
             with open(self.log_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        if data['timestamp'] >= cutoff:
-                            kept_lines.append(line)
-                    except (json.JSONDecodeError, KeyError):
-                        continue
+                for _ in f:
+                    line_count += 1
 
             # Only rotate if we've exceeded max_entries
             if line_count <= self.max_entries:
-                # Still clean up old files periodically
-                self._cleanup_old_log_files()
+                # Clean up old rotated files once per day
+                if should_cleanup_files:
+                    self._cleanup_old_log_files()
+                    self._last_cleanup_time = now
                 return
 
             # Create timestamped backup filename (e.g., system_events.2026-03-06.jsonl)
@@ -346,6 +340,7 @@ class LogManager:
 
             # Clean up old rotated files
             self._cleanup_old_log_files()
+            self._last_cleanup_time = now
 
             # New file will be created automatically on next log write
 
@@ -353,14 +348,20 @@ class LogManager:
             # Silently fail - don't crash if rotation fails
             pass
 
+        # Clean up old rotated files once per day when not rotated
+        if should_cleanup_files:
+            self._cleanup_old_log_files()
+            self._last_cleanup_time = now
+
     def _cleanup_old_log_files(self) -> None:
         """Delete rotated log files older than retention_days."""
         try:
             cutoff_time = time.time() - (self.retention_days * 86400)
             log_dir = self.log_file.parent
+            base_name = self.log_file.stem
 
-            # Find all rotated log files (system_events.YYYY-MM-DD*.jsonl)
-            for path in log_dir.glob("system_events.*.jsonl"):
+            # Find all rotated log files (<base_name>.YYYY-MM-DD*.jsonl)
+            for path in log_dir.glob(f"{base_name}.*.jsonl"):
                 # Skip the current log file
                 if path == self.log_file:
                     continue

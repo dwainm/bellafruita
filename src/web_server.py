@@ -101,6 +101,80 @@ class WebDashboard:
 
             return {"logs": logs, "total": len(logs)}
 
+        @self.app.get("/api/log-files")
+        async def get_log_files():
+            """List available log files for the log reader view."""
+            log_dir = self.log_manager.log_file.parent
+            current_name = self.log_manager.log_file.name
+
+            files = []
+            for path in log_dir.glob("*.jsonl"):
+                try:
+                    stat = path.stat()
+                    files.append({
+                        "name": path.name,
+                        "size": stat.st_size,
+                        "modified": stat.st_mtime,
+                        "is_current": path.name == current_name,
+                    })
+                except Exception:
+                    continue
+
+            files.sort(key=lambda item: item["modified"], reverse=True)
+            return {"files": files, "total": len(files)}
+
+        @self.app.get("/api/log-files/{filename}")
+        async def get_log_file_entries(filename: str):
+            """Read all entries from a selected log file."""
+            # Simple hardening: prevent path traversal and nested paths
+            if "/" in filename or "\\" in filename or ".." in filename:
+                return {"error": "Invalid filename", "logs": [], "total": 0}
+
+            log_dir = self.log_manager.log_file.parent.resolve()
+            target_file = (log_dir / filename).resolve()
+
+            # Ensure selected file stays within log directory
+            if target_file.parent != log_dir or not target_file.exists() or target_file.suffix != ".jsonl":
+                return {"error": "File not found", "logs": [], "total": 0}
+
+            from datetime import datetime
+            logs = []
+
+            try:
+                with open(target_file, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                            ts = float(entry.get("timestamp", 0))
+                            dt = datetime.fromtimestamp(ts) if ts else None
+                            logs.append({
+                                "timestamp": dt.strftime("%H:%M:%S.%f")[:-3] if dt else "",
+                                "datetime": dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "",
+                                "date": dt.strftime("%Y-%m-%d") if dt else "",
+                                "level": entry.get("level", "INFO"),
+                                "message": entry.get("message", ""),
+                            })
+                        except Exception:
+                            # Keep malformed lines visible for diagnostics
+                            logs.append({
+                                "timestamp": "",
+                                "datetime": "",
+                                "date": "",
+                                "level": "RAW",
+                                "message": line,
+                            })
+            except Exception as e:
+                return {"error": str(e), "logs": [], "total": 0}
+
+            return {
+                "file": filename,
+                "logs": logs,
+                "total": len(logs),
+            }
+
         @self.app.post("/api/test/flood")
         async def flood_logs(count: int = 100, delay_ms: int = 50):
             """Inject test events to watch UI update in real-time.
