@@ -98,40 +98,6 @@ class WebDashboard:
 
             return {"logs": logs}
 
-        @self.app.post("/api/test/flood")
-        async def flood_logs(count: int = 100, delay_ms: int = 50):
-            """Inject test events to watch UI update in real-time.
-
-            Args:
-                count: Number of events to generate (default 100)
-                delay_ms: Delay between events in milliseconds (default 50)
-
-            Usage:
-                curl -X POST "http://localhost:7681/api/test/flood?count=50&delay_ms=100"
-            """
-            import asyncio
-            import random
-
-            messages = [
-                "Mode: READY -> MOVING_C3_TO_C2",
-                "Mode: MOVING_C3_TO_C2 -> READY",
-                "Started MOVING_C2_TO_PALM - MOTOR_2 running",
-                "MOTOR_2 stopped after 1s delay",
-                "Motor 3 started after 2 second delay",
-                "Completed MOVING_C3_TO_C2 - both motors stopped",
-                "KLAAR_GEWEEG flag set via API",
-                "Bin detected on S1",
-            ]
-            levels = ['INFO', 'INFO', 'INFO', 'WARNING']
-
-            for i in range(count):
-                level = random.choice(levels)
-                msg = f"[Test {i+1}/{count}] {random.choice(messages)}"
-                self.log_manager.log_event(level, msg)
-                await asyncio.sleep(delay_ms / 1000.0)
-
-            return {"success": True, "generated": count}
-
         @self.app.post("/tipbins")
         async def set_klaar_geweeg():
             """POST endpoint to set klaar_geweeg state to true."""
@@ -169,8 +135,8 @@ class WebDashboard:
                     # Send to client
                     await websocket.send_json(snapshot)
 
-                    # Wait before next update (2 updates/second)
-                    await asyncio.sleep(0.5)
+                    # Wait before next update (10 updates/second)
+                    await asyncio.sleep(0.1)
 
             except WebSocketDisconnect:
                 self.active_connections.remove(websocket)
