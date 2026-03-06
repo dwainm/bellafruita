@@ -18,8 +18,8 @@ class ModbusConfig:
 class SystemConfig:
     """Core system timing and monitoring settings."""
     poll_interval: float = 0.1
-    log_stack_size: int = 50000
-    log_retention_days: int = 7
+    log_stack_size: int = 10000  # Lines per log file before rotation
+    log_retention_days: int = 7  # Delete old log files after this many days
     comms_timeout: float = 5.0  # Comms failure detection time (how long VERSION=0 before declaring comms failed)
     edge_detection_window_ms: float = 15000.0  # Time window for detecting button presses and signal edges (milliseconds)
 
