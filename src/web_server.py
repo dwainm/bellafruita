@@ -85,18 +85,126 @@ class WebDashboard:
         @self.app.get("/api/logs")
         async def get_logs():
             """REST endpoint for recent log entries."""
-            recent_events = self.log_manager.get_recent_events(count=1000)
+            from datetime import datetime
+            recent_events = self.log_manager.get_recent_events(count=2000)
 
-            # Format events for frontend
             logs = []
             for event in recent_events:
+                dt = datetime.fromtimestamp(event.timestamp)
                 logs.append({
                     "timestamp": event.get_formatted_time(),
+                    "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "date": dt.strftime("%Y-%m-%d"),
                     "level": event.level,
                     "message": event.message
                 })
 
-            return {"logs": logs}
+            return {"logs": logs, "total": len(logs)}
+
+        @self.app.get("/api/log-files")
+        async def get_log_files():
+            """List available log files for the log reader view."""
+            log_dir = self.log_manager.log_file.parent
+            current_name = self.log_manager.log_file.name
+
+            files = []
+            for path in log_dir.glob("*.jsonl"):
+                try:
+                    stat = path.stat()
+                    files.append({
+                        "name": path.name,
+                        "size": stat.st_size,
+                        "modified": stat.st_mtime,
+                        "is_current": path.name == current_name,
+                    })
+                except Exception:
+                    continue
+
+            files.sort(key=lambda item: item["modified"], reverse=True)
+            return {"files": files, "total": len(files)}
+
+        @self.app.get("/api/log-files/{filename}")
+        async def get_log_file_entries(filename: str):
+            """Read all entries from a selected log file."""
+            # Simple hardening: prevent path traversal and nested paths
+            if "/" in filename or "\\" in filename or ".." in filename:
+                return {"error": "Invalid filename", "logs": [], "total": 0}
+
+            log_dir = self.log_manager.log_file.parent.resolve()
+            target_file = (log_dir / filename).resolve()
+
+            # Ensure selected file stays within log directory
+            if target_file.parent != log_dir or not target_file.exists() or target_file.suffix != ".jsonl":
+                return {"error": "File not found", "logs": [], "total": 0}
+
+            from datetime import datetime
+
+            def _read_log_entries(path: Path):
+                rows = []
+                with open(path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                            ts = float(entry.get("timestamp", 0))
+                            dt = datetime.fromtimestamp(ts) if ts else None
+                            rows.append({
+                                "timestamp": dt.strftime("%H:%M:%S.%f")[:-3] if dt else "",
+                                "datetime": dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "",
+                                "date": dt.strftime("%Y-%m-%d") if dt else "",
+                                "level": entry.get("level", "INFO"),
+                                "message": entry.get("message", ""),
+                            })
+                        except Exception:
+                            # Keep malformed lines visible for diagnostics
+                            rows.append({
+                                "timestamp": "",
+                                "datetime": "",
+                                "date": "",
+                                "level": "RAW",
+                                "message": line,
+                            })
+                return rows
+
+            try:
+                logs = await asyncio.to_thread(_read_log_entries, target_file)
+            except Exception as e:
+                return {"error": str(e), "logs": [], "total": 0}
+
+            return {
+                "file": filename,
+                "logs": logs,
+                "total": len(logs),
+            }
+
+        if self.config.use_mock:
+            @self.app.post("/api/test/flood")
+            async def flood_logs(count: int = 100, delay_ms: int = 50):
+                """Inject test events to watch UI update in real-time (mock mode only)."""
+                import asyncio
+                import random
+
+                messages = [
+                    "Mode: READY -> MOVING_C3_TO_C2",
+                    "Mode: MOVING_C3_TO_C2 -> READY",
+                    "Started MOVING_C2_TO_PALM - MOTOR_2 running",
+                    "MOTOR_2 stopped after 1s delay",
+                    "Motor 3 started after 2 second delay",
+                    "Completed MOVING_C3_TO_C2 - both motors stopped",
+                    "KLAAR_GEWEEG flag set via API",
+                    "Bin detected on S1",
+                ]
+                levels = ['INFO', 'INFO', 'INFO', 'WARNING']
+
+                for i in range(count):
+                    level = random.choice(levels)
+                    msg = f"[Test {i+1}/{count}] {random.choice(messages)}"
+                    self.log_manager.log_event(level, msg)
+                    await asyncio.sleep(delay_ms / 1000.0)
+
+                return {"success": True, "generated": count}
 
         @self.app.post("/tipbins")
         async def set_klaar_geweeg():
@@ -135,8 +243,8 @@ class WebDashboard:
                     # Send to client
                     await websocket.send_json(snapshot)
 
-                    # Wait before next update (10 updates/second)
-                    await asyncio.sleep(0.1)
+                    # Wait before next update (2 updates/second)
+                    await asyncio.sleep(0.5)
 
             except WebSocketDisconnect:
                 self.active_connections.remove(websocket)

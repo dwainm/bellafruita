@@ -111,6 +111,31 @@
             margin-bottom: 15px;
         }
 
+        .panel-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .panel-title-row .panel-title {
+            margin-bottom: 0;
+        }
+
+        .more-button {
+            background: #2a2a2a;
+            border: 1px solid #00aaff;
+            color: #e0e0e0;
+            padding: 6px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .more-button:hover {
+            background: #00aaff;
+            color: #000;
+        }
+
         /* I/O Grid Layout (3 columns like TUI) */
         .io-grid {
             display: grid;
@@ -222,7 +247,7 @@
         /* System Log */
         .log-panel {
             border-color: #ffaa00;
-            max-height: 400px;
+            height: 500px;
             overflow-y: auto;
         }
 
@@ -249,6 +274,88 @@
 
         .log-message {
             color: #e0e0e0;
+        }
+
+        .log-date-header {
+            color: #ffaa00;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 6px 0 2px;
+            border-top: 1px solid #333;
+            margin-top: 4px;
+        }
+
+        .log-reader-overlay {
+            position: fixed;
+            inset: 0;
+            background: #0a0a0a;
+            z-index: 999;
+            display: none;
+            padding: 15px;
+        }
+
+        .log-reader-overlay.open {
+            display: block;
+        }
+
+        .log-reader-layout {
+            height: calc(100vh - 30px);
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 15px;
+        }
+
+        .log-reader-files,
+        .log-reader-content {
+            background: #1a1a1a;
+            border: 2px solid #00aaff;
+            padding: 12px;
+            overflow-y: auto;
+        }
+
+        .log-reader-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .log-file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .log-file-item {
+            border: 1px solid #333;
+            background: #222;
+            color: #ddd;
+            text-align: left;
+            padding: 8px;
+            cursor: pointer;
+        }
+
+        .log-file-item.active {
+            border-color: #ffaa00;
+            background: #2d2a1f;
+        }
+
+        .log-file-meta {
+            color: #888;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .log-reader-title {
+            color: #00d9ff;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 900px) {
+            .log-reader-layout {
+                grid-template-columns: 1fr;
+            }
         }
 
         .no-data {
@@ -299,7 +406,14 @@
             <div class="io-column">
                 <h3>Input Coils</h3>
                 <div id="input-coils">
-                    <div class="no-data">Loading...</div>
+                    <div class="io-item"><div class="io-indicator" id="io-S1"></div><div class="io-label">S1</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-S2"></div><div class="io-label">S2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CS1"></div><div class="io-label">CS1</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CS2"></div><div class="io-label">CS2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CS3"></div><div class="io-label">CS3</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-M1_Trip"></div><div class="io-label">M1_Trip</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-M2_Trip"></div><div class="io-label">M2_Trip</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-E_Stop"></div><div class="io-label">E_Stop</div></div>
                 </div>
             </div>
 
@@ -307,7 +421,13 @@
             <div class="io-column">
                 <h3>Input Signals</h3>
                 <div id="input-signals">
-                    <div class="no-data">Loading...</div>
+                    <div class="io-item"><div class="io-indicator" id="io-Manual_Select"></div><div class="io-label">Manual_Select</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-Auto_Select"></div><div class="io-label">Auto_Select</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CPS_1"></div><div class="io-label">CPS_1</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CPS_2"></div><div class="io-label">CPS_2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-Reset_Btn"></div><div class="io-label">Reset_Btn</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-PALM_Run_Signal"></div><div class="io-label">PALM_Run_Signal</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-DHLM_Trip_Signal"></div><div class="io-label">DHLM_Trip_Signal</div></div>
                 </div>
             </div>
 
@@ -315,7 +435,10 @@
             <div class="io-column">
                 <h3>Output Coils</h3>
                 <div id="output-coils">
-                    <div class="no-data">Loading...</div>
+                    <div class="io-item"><div class="io-indicator" id="io-LED_GREEN"></div><div class="io-label">LED_GREEN</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-MOTOR_2"></div><div class="io-label">MOTOR_2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-MOTOR_3"></div><div class="io-label">MOTOR_3</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-LED_RED"></div><div class="io-label">LED_RED</div></div>
                 </div>
             </div>
         </div>
@@ -344,9 +467,36 @@
 
     <!-- System Log Panel -->
     <div class="panel log-panel">
-        <div class="panel-title">System Log</div>
+        <div class="panel-title-row">
+            <div class="panel-title">System Log</div>
+            <button class="more-button" onclick="openLogReader()">More</button>
+        </div>
         <div id="system-log">
             <div class="no-data">Loading logs...</div>
+        </div>
+    </div>
+
+    <div id="log-reader-overlay" class="log-reader-overlay">
+        <div class="log-reader-layout">
+            <div class="log-reader-files">
+                <div class="log-reader-header">
+                    <div class="log-reader-title">Log Files</div>
+                    <button class="more-button" onclick="refreshLogFiles()">Refresh</button>
+                </div>
+                <div id="log-file-list" class="log-file-list">
+                    <div class="no-data">Loading files...</div>
+                </div>
+            </div>
+
+            <div class="log-reader-content">
+                <div class="log-reader-header">
+                    <div id="log-reader-file-title" class="log-reader-title">Select a log file</div>
+                    <button class="more-button" onclick="closeLogReader()">Back</button>
+                </div>
+                <div id="log-reader-entries">
+                    <div class="no-data">No file selected</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -355,6 +505,12 @@
         let reconnectInterval = null;
         let lastInputHeartbeat = 0;
         let lastOutputHeartbeat = 0;
+        let lastRulesJson = '';
+        let lastStateJson = '';
+        let lastLogTimestamp = '';
+        let lastLogCount = 0;
+        let lastLogDate = '';
+        let currentLogFile = '';
 
         async function loadConfig() {
             try {
@@ -491,56 +647,31 @@
             // Update state variables
             updateStateVariables(data.rule_state);
 
-            // Fetch and update logs
-            fetchLogs();
+            // Note: Logs are fetched on a separate timer, not every WebSocket update
         }
 
         function updateIOSection(inputData, outputData) {
             if (!inputData || !outputData) return;
 
-            // Split inputs into two columns (like TUI screenshot)
-            const inputCoils = ['S1', 'S2', 'CS1', 'CS2', 'CS3', 'M1_Trip', 'M2_Trip', 'E_Stop'];
-            const inputSignals = ['Manual_Select', 'Auto_Select', 'CPS_1', 'CPS_2', 'Reset_Btn', 'PALM_Run_Signal', 'DHLM_Trip_Signal'];
-            const outputCoils = ['LED_GREEN', 'MOTOR_2', 'MOTOR_3', 'LED_RED'];
+            // Update indicators by toggling class (no DOM rebuild)
+            const allKeys = [
+                'S1', 'S2', 'CS1', 'CS2', 'CS3', 'M1_Trip', 'M2_Trip', 'E_Stop',
+                'Manual_Select', 'Auto_Select', 'CPS_1', 'CPS_2', 'Reset_Btn', 'PALM_Run_Signal', 'DHLM_Trip_Signal',
+                'LED_GREEN', 'MOTOR_2', 'MOTOR_3', 'LED_RED'
+            ];
 
-            // Render input coils
-            const inputCoilsHtml = inputCoils.map(key => {
-                if (inputData[key] === undefined) return '';
-                const isActive = inputData[key] === true || inputData[key] === 1;
-                return `
-                    <div class="io-item">
-                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
-                        <div class="io-label">${key}</div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('input-coils').innerHTML = inputCoilsHtml || '<div class="no-data">No data</div>';
-
-            // Render input signals
-            const inputSignalsHtml = inputSignals.map(key => {
-                if (inputData[key] === undefined) return '';
-                const isActive = inputData[key] === true || inputData[key] === 1;
-                return `
-                    <div class="io-item">
-                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
-                        <div class="io-label">${key}</div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('input-signals').innerHTML = inputSignalsHtml || '<div class="no-data">No data</div>';
-
-            // Render output coils
-            const outputCoilsHtml = outputCoils.map(key => {
-                if (outputData[key] === undefined) return '';
-                const isActive = outputData[key] === true || outputData[key] === 1;
-                return `
-                    <div class="io-item">
-                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
-                        <div class="io-label">${key}</div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('output-coils').innerHTML = outputCoilsHtml || '<div class="no-data">No data</div>';
+            const data = { ...inputData, ...outputData };
+            for (const key of allKeys) {
+                const el = document.getElementById('io-' + key);
+                if (el) {
+                    const isActive = data[key] === true || data[key] === 1;
+                    if (isActive) {
+                        el.classList.add('active');
+                    } else {
+                        el.classList.remove('active');
+                    }
+                }
+            }
 
             // Update VERSION register
             if (outputData.VERSION !== undefined) {
@@ -549,6 +680,11 @@
         }
 
         function updateActiveRules(rules) {
+            // Only rebuild if changed
+            const rulesJson = JSON.stringify(rules || []);
+            if (rulesJson === lastRulesJson) return;
+            lastRulesJson = rulesJson;
+
             const container = document.getElementById('active-rules');
 
             if (!rules || rules.length === 0) {
@@ -564,6 +700,11 @@
         }
 
         function updateStateVariables(state) {
+            // Only rebuild if changed
+            const stateJson = JSON.stringify(state || {});
+            if (stateJson === lastStateJson) return;
+            lastStateJson = stateJson;
+
             const container = document.getElementById('state-variables');
 
             if (!state || Object.keys(state).length === 0) {
@@ -600,21 +741,146 @@
                 const response = await fetch('/api/logs');
                 const data = await response.json();
 
-                if (data.logs && data.logs.length > 0) {
-                    const html = data.logs.slice(-1000).reverse().map(log => {
-                        return `
-                            <div class="log-entry">
-                                <span class="log-timestamp">${log.timestamp || ''}</span>
-                                <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
-                                <span class="log-message">${log.message || ''}</span>
-                            </div>
-                        `;
-                    }).join('');
-
-                    document.getElementById('system-log').innerHTML = html;
+                if (!data.logs || data.logs.length === 0) {
+                    document.getElementById('system-log').innerHTML = '<div class="no-data">No logs yet</div>';
+                    lastLogCount = 0;
+                    lastLogTimestamp = '';
+                    lastLogDate = '';
+                    return;
                 }
+
+                // Skip DOM update if nothing has changed
+                const newCount = data.total || data.logs.length;
+                const newestTimestamp = data.logs[data.logs.length - 1]?.timestamp || '';
+                const newestDate = data.logs[data.logs.length - 1]?.datetime || '';
+                if (newCount === lastLogCount && newestTimestamp === lastLogTimestamp && newestDate === lastLogDate) return;
+                lastLogCount = newCount;
+                lastLogTimestamp = newestTimestamp;
+                lastLogDate = newestDate;
+
+                const logPanel = document.getElementById('system-log').closest('.log-panel');
+                const atTop = logPanel.scrollTop < 40;
+
+                let currentDate = '';
+                const html = data.logs.slice(-2000).reverse().map(log => {
+                    let dateHeader = '';
+                    const logDate = log.date || '';
+                    if (logDate && logDate !== currentDate) {
+                        currentDate = logDate;
+                        dateHeader = `<div class="log-date-header">${logDate}</div>`;
+                    }
+                    return `${dateHeader}<div class="log-entry">
+                        <span class="log-timestamp">${log.datetime || log.timestamp || ''}</span>
+                        <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
+                        <span class="log-message">${log.message || ''}</span>
+                    </div>`;
+                }).join('');
+
+                document.getElementById('system-log').innerHTML = html;
+
+                // Only jump to top if user was already there
+                if (atTop) logPanel.scrollTop = 0;
             } catch (error) {
                 console.error('Failed to fetch logs:', error);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        function openLogReader() {
+            document.getElementById('log-reader-overlay').classList.add('open');
+            refreshLogFiles();
+        }
+
+        function closeLogReader() {
+            document.getElementById('log-reader-overlay').classList.remove('open');
+        }
+
+        async function refreshLogFiles() {
+            const listEl = document.getElementById('log-file-list');
+            listEl.innerHTML = '<div class="no-data">Loading files...</div>';
+
+            try {
+                const response = await fetch('/api/log-files');
+                const data = await response.json();
+                const files = data.files || [];
+
+                if (files.length === 0) {
+                    listEl.innerHTML = '<div class="no-data">No log files found</div>';
+                    return;
+                }
+
+                const html = files.map(file => {
+                    const currentTag = file.is_current ? ' (current)' : '';
+                    const activeClass = file.name === currentLogFile ? 'active' : '';
+                    return `
+                        <button class="log-file-item ${activeClass}" onclick="loadLogFile('${file.name.replace(/'/g, "\\'")}')">
+                            <div>${file.name}${currentTag}</div>
+                            <div class="log-file-meta">${formatBytes(file.size)}</div>
+                        </button>
+                    `;
+                }).join('');
+
+                listEl.innerHTML = html;
+
+                if (!currentLogFile) {
+                    loadLogFile(files[0].name);
+                }
+            } catch (error) {
+                listEl.innerHTML = '<div class="no-data">Failed to load log files</div>';
+                console.error('Failed to load log files:', error);
+            }
+        }
+
+        async function loadLogFile(filename) {
+            currentLogFile = filename;
+            document.getElementById('log-reader-file-title').textContent = filename;
+
+            // Refresh active highlight
+            const buttons = document.querySelectorAll('.log-file-item');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            buttons.forEach(btn => {
+                if (btn.textContent.includes(filename)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            const entriesEl = document.getElementById('log-reader-entries');
+            entriesEl.innerHTML = '<div class="no-data">Loading entries...</div>';
+
+            try {
+                const response = await fetch(`/api/log-files/${encodeURIComponent(filename)}`);
+                const data = await response.json();
+                const logs = data.logs || [];
+
+                if (logs.length === 0) {
+                    entriesEl.innerHTML = '<div class="no-data">No entries in this file</div>';
+                    return;
+                }
+
+                let currentDate = '';
+                const html = logs.slice().reverse().map(log => {
+                    let dateHeader = '';
+                    if (log.date && log.date !== currentDate) {
+                        currentDate = log.date;
+                        dateHeader = `<div class="log-date-header">${log.date}</div>`;
+                    }
+
+                    return `${dateHeader}<div class="log-entry">
+                        <span class="log-timestamp">${log.datetime || log.timestamp || ''}</span>
+                        <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
+                        <span class="log-message">${log.message || ''}</span>
+                    </div>`;
+                }).join('');
+
+                entriesEl.innerHTML = html;
+            } catch (error) {
+                entriesEl.innerHTML = '<div class="no-data">Failed to load file entries</div>';
+                console.error('Failed to load log file:', error);
             }
         }
 
@@ -636,6 +902,8 @@
             .then(() => loadInitialState())
             .then(() => {
                 connect();
+                // Initial log fetch; periodic refresh is configured below
+                fetchLogs();
             });
 
         // Refresh logs periodically

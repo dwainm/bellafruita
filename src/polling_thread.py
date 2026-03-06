@@ -156,10 +156,10 @@ class PollingThread(threading.Thread):
             except Exception as e:
                 self.controller.log_manager.error(f"Polling thread error: {e}")
 
-            # Rotate log file periodically (every ~1000 loops to avoid excessive file I/O)
+            # Clean up old log entries periodically (every ~1000 loops to avoid excessive file I/O)
             self._rotation_counter += 1
             if self._rotation_counter >= 1000:
-                self.controller.log_manager.rotate_log_file()
+                self.controller.log_manager.cleanup_old_entries()
                 self._rotation_counter = 0
 
             # Sleep for remainder of poll interval

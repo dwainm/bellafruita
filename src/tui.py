@@ -514,6 +514,8 @@ class ModbusTUI(App):
         self.connected = False
         self.last_input_heartbeat = 0  # Track heartbeat changes
         self.last_output_heartbeat = 0
+        self._last_event_count = 0  # Track event count to avoid unnecessary redraws
+        self._last_event_signature = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -812,18 +814,25 @@ class ModbusTUI(App):
         output_logs = self.controller.log_manager.get_recent_output_logs(count=5)
         self.log_widget.update_logs(input_logs, output_logs, count=5)
 
-        # Update event log
-        events = self.controller.log_manager.get_recent_events(count=1000)
-        self.event_widget.update_events(events, count=1000)
+        # Only redraw event log if new events have arrived since last refresh
+        events = self.controller.log_manager.get_recent_events(count=2000)
+        newest_event_signature = None
+        if events:
+            newest = events[-1]
+            newest_event_signature = (newest.timestamp, newest.level, newest.message)
 
-        # Auto-scroll to top to show newest events (only if user isn't scrolling)
-        try:
-            event_container = self.query_one("#event-log-container", ScrollableContainer)
-            # Check if user is at the top (within 5 lines)
-            if event_container.scroll_offset.y < 5:
-                event_container.scroll_home(animate=False)
-        except Exception:
-            pass  # Container not ready yet
+        if len(events) != self._last_event_count or newest_event_signature != self._last_event_signature:
+            self._last_event_count = len(events)
+            self._last_event_signature = newest_event_signature
+            self.event_widget.update_events(events, count=2000)
+
+            # Auto-scroll to top to show newest events only if already near the top
+            try:
+                event_container = self.query_one("#event-log-container", ScrollableContainer)
+                if event_container.scroll_offset.y < 5:
+                    event_container.scroll_home(animate=False)
+            except Exception:
+                pass  # Container not ready yet
 
         # Update active rules display from shared state (thread-safe)
         if self.active_rules_widget and self.shared_state:
