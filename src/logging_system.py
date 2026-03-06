@@ -273,14 +273,24 @@ class LogManager:
     def _load_logs_from_file(self) -> None:
         """Load event logs from persistent files on startup.
 
-        Loads from both the current file and the backup (.old) file to get more history.
+        Loads from all rotated log files within retention period, oldest first.
         """
-        # Load from backup file first (older logs)
+        log_dir = self.log_file.parent
+        base_name = self.log_file.stem  # system_events
+
+        # Find all rotated log files (system_events.YYYY-MM-DD*.jsonl)
+        rotated_files = sorted(log_dir.glob(f"{base_name}.*.jsonl"))
+
+        # Load rotated files first (oldest to newest based on filename)
+        for path in rotated_files:
+            self._load_single_log_file(path)
+
+        # Load legacy .old backup if it exists
         backup_file = Path(str(self.log_file) + '.old')
         if backup_file.exists():
             self._load_single_log_file(backup_file)
 
-        # Then load from current file (newer logs)
+        # Load current file last (newest)
         if self.log_file.exists():
             self._load_single_log_file(self.log_file)
 
