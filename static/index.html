@@ -742,6 +742,10 @@
                 const data = await response.json();
 
                 if (!data.logs || data.logs.length === 0) {
+                    document.getElementById('system-log').innerHTML = '<div class="no-data">No logs yet</div>';
+                    lastLogCount = 0;
+                    lastLogTimestamp = '';
+                    lastLogDate = '';
                     return;
                 }
 

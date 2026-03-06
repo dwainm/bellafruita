@@ -138,10 +138,10 @@ class WebDashboard:
                 return {"error": "File not found", "logs": [], "total": 0}
 
             from datetime import datetime
-            logs = []
 
-            try:
-                with open(target_file, "r") as f:
+            def _read_log_entries(path: Path):
+                rows = []
+                with open(path, "r") as f:
                     for line in f:
                         line = line.strip()
                         if not line:
@@ -150,7 +150,7 @@ class WebDashboard:
                             entry = json.loads(line)
                             ts = float(entry.get("timestamp", 0))
                             dt = datetime.fromtimestamp(ts) if ts else None
-                            logs.append({
+                            rows.append({
                                 "timestamp": dt.strftime("%H:%M:%S.%f")[:-3] if dt else "",
                                 "datetime": dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "",
                                 "date": dt.strftime("%Y-%m-%d") if dt else "",
@@ -159,13 +159,17 @@ class WebDashboard:
                             })
                         except Exception:
                             # Keep malformed lines visible for diagnostics
-                            logs.append({
+                            rows.append({
                                 "timestamp": "",
                                 "datetime": "",
                                 "date": "",
                                 "level": "RAW",
                                 "message": line,
                             })
+                return rows
+
+            try:
+                logs = await asyncio.to_thread(_read_log_entries, target_file)
             except Exception as e:
                 return {"error": str(e), "logs": [], "total": 0}
 
