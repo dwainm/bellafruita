@@ -85,18 +85,21 @@ class WebDashboard:
         @self.app.get("/api/logs")
         async def get_logs():
             """REST endpoint for recent log entries."""
-            recent_events = self.log_manager.get_recent_events(count=1000)
+            from datetime import datetime
+            recent_events = self.log_manager.get_recent_events(count=2000)
 
-            # Format events for frontend
             logs = []
             for event in recent_events:
+                dt = datetime.fromtimestamp(event.timestamp)
                 logs.append({
                     "timestamp": event.get_formatted_time(),
+                    "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "date": dt.strftime("%Y-%m-%d"),
                     "level": event.level,
                     "message": event.message
                 })
 
-            return {"logs": logs}
+            return {"logs": logs, "total": len(logs)}
 
         @self.app.post("/tipbins")
         async def set_klaar_geweeg():

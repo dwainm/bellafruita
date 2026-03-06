@@ -222,7 +222,7 @@
         /* System Log */
         .log-panel {
             border-color: #ffaa00;
-            max-height: 400px;
+            height: 500px;
             overflow-y: auto;
         }
 
@@ -249,6 +249,15 @@
 
         .log-message {
             color: #e0e0e0;
+        }
+
+        .log-date-header {
+            color: #ffaa00;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 6px 0 2px;
+            border-top: 1px solid #333;
+            margin-top: 4px;
         }
 
         .no-data {
@@ -355,6 +364,8 @@
         let reconnectInterval = null;
         let lastInputHeartbeat = 0;
         let lastOutputHeartbeat = 0;
+        let lastLogCount = 0;
+        let lastLogDate = '';
 
         async function loadConfig() {
             try {
@@ -490,9 +501,6 @@
 
             // Update state variables
             updateStateVariables(data.rule_state);
-
-            // Fetch and update logs
-            fetchLogs();
         }
 
         function updateIOSection(inputData, outputData) {
@@ -600,19 +608,37 @@
                 const response = await fetch('/api/logs');
                 const data = await response.json();
 
-                if (data.logs && data.logs.length > 0) {
-                    const html = data.logs.slice(-1000).reverse().map(log => {
-                        return `
-                            <div class="log-entry">
-                                <span class="log-timestamp">${log.timestamp || ''}</span>
-                                <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
-                                <span class="log-message">${log.message || ''}</span>
-                            </div>
-                        `;
-                    }).join('');
+                if (!data.logs || data.logs.length === 0) return;
 
-                    document.getElementById('system-log').innerHTML = html;
-                }
+                // Skip DOM update if nothing has changed
+                const newCount = data.total || data.logs.length;
+                const newestDate = data.logs[data.logs.length - 1]?.datetime || '';
+                if (newCount === lastLogCount && newestDate === lastLogDate) return;
+                lastLogCount = newCount;
+                lastLogDate = newestDate;
+
+                const logPanel = document.getElementById('system-log').closest('.log-panel');
+                const atTop = logPanel.scrollTop < 40;
+
+                let currentDate = '';
+                const html = data.logs.slice(-2000).reverse().map(log => {
+                    let dateHeader = '';
+                    const logDate = log.date || '';
+                    if (logDate && logDate !== currentDate) {
+                        currentDate = logDate;
+                        dateHeader = `<div class="log-date-header">${logDate}</div>`;
+                    }
+                    return `${dateHeader}<div class="log-entry">
+                        <span class="log-timestamp">${log.datetime || log.timestamp || ''}</span>
+                        <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
+                        <span class="log-message">${log.message || ''}</span>
+                    </div>`;
+                }).join('');
+
+                document.getElementById('system-log').innerHTML = html;
+
+                // Only jump to top if user was already there
+                if (atTop) logPanel.scrollTop = 0;
             } catch (error) {
                 console.error('Failed to fetch logs:', error);
             }
