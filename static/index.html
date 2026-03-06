@@ -308,7 +308,14 @@
             <div class="io-column">
                 <h3>Input Coils</h3>
                 <div id="input-coils">
-                    <div class="no-data">Loading...</div>
+                    <div class="io-item"><div class="io-indicator" id="io-S1"></div><div class="io-label">S1</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-S2"></div><div class="io-label">S2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CS1"></div><div class="io-label">CS1</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CS2"></div><div class="io-label">CS2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CS3"></div><div class="io-label">CS3</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-M1_Trip"></div><div class="io-label">M1_Trip</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-M2_Trip"></div><div class="io-label">M2_Trip</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-E_Stop"></div><div class="io-label">E_Stop</div></div>
                 </div>
             </div>
 
@@ -316,7 +323,13 @@
             <div class="io-column">
                 <h3>Input Signals</h3>
                 <div id="input-signals">
-                    <div class="no-data">Loading...</div>
+                    <div class="io-item"><div class="io-indicator" id="io-Manual_Select"></div><div class="io-label">Manual_Select</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-Auto_Select"></div><div class="io-label">Auto_Select</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CPS_1"></div><div class="io-label">CPS_1</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-CPS_2"></div><div class="io-label">CPS_2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-Reset_Btn"></div><div class="io-label">Reset_Btn</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-PALM_Run_Signal"></div><div class="io-label">PALM_Run_Signal</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-DHLM_Trip_Signal"></div><div class="io-label">DHLM_Trip_Signal</div></div>
                 </div>
             </div>
 
@@ -324,7 +337,10 @@
             <div class="io-column">
                 <h3>Output Coils</h3>
                 <div id="output-coils">
-                    <div class="no-data">Loading...</div>
+                    <div class="io-item"><div class="io-indicator" id="io-LED_GREEN"></div><div class="io-label">LED_GREEN</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-MOTOR_2"></div><div class="io-label">MOTOR_2</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-MOTOR_3"></div><div class="io-label">MOTOR_3</div></div>
+                    <div class="io-item"><div class="io-indicator" id="io-LED_RED"></div><div class="io-label">LED_RED</div></div>
                 </div>
             </div>
         </div>
@@ -364,8 +380,9 @@
         let reconnectInterval = null;
         let lastInputHeartbeat = 0;
         let lastOutputHeartbeat = 0;
-        let lastLogCount = 0;
-        let lastLogDate = '';
+        let lastRulesJson = '';
+        let lastStateJson = '';
+        let lastLogTimestamp = '';
 
         async function loadConfig() {
             try {
@@ -501,54 +518,32 @@
 
             // Update state variables
             updateStateVariables(data.rule_state);
+
+            // Note: Logs are fetched on a separate timer, not every WebSocket update
         }
 
         function updateIOSection(inputData, outputData) {
             if (!inputData || !outputData) return;
 
-            // Split inputs into two columns (like TUI screenshot)
-            const inputCoils = ['S1', 'S2', 'CS1', 'CS2', 'CS3', 'M1_Trip', 'M2_Trip', 'E_Stop'];
-            const inputSignals = ['Manual_Select', 'Auto_Select', 'CPS_1', 'CPS_2', 'Reset_Btn', 'PALM_Run_Signal', 'DHLM_Trip_Signal'];
-            const outputCoils = ['LED_GREEN', 'MOTOR_2', 'MOTOR_3', 'LED_RED'];
+            // Update indicators by toggling class (no DOM rebuild)
+            const allKeys = [
+                'S1', 'S2', 'CS1', 'CS2', 'CS3', 'M1_Trip', 'M2_Trip', 'E_Stop',
+                'Manual_Select', 'Auto_Select', 'CPS_1', 'CPS_2', 'Reset_Btn', 'PALM_Run_Signal', 'DHLM_Trip_Signal',
+                'LED_GREEN', 'MOTOR_2', 'MOTOR_3', 'LED_RED'
+            ];
 
-            // Render input coils
-            const inputCoilsHtml = inputCoils.map(key => {
-                if (inputData[key] === undefined) return '';
-                const isActive = inputData[key] === true || inputData[key] === 1;
-                return `
-                    <div class="io-item">
-                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
-                        <div class="io-label">${key}</div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('input-coils').innerHTML = inputCoilsHtml || '<div class="no-data">No data</div>';
-
-            // Render input signals
-            const inputSignalsHtml = inputSignals.map(key => {
-                if (inputData[key] === undefined) return '';
-                const isActive = inputData[key] === true || inputData[key] === 1;
-                return `
-                    <div class="io-item">
-                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
-                        <div class="io-label">${key}</div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('input-signals').innerHTML = inputSignalsHtml || '<div class="no-data">No data</div>';
-
-            // Render output coils
-            const outputCoilsHtml = outputCoils.map(key => {
-                if (outputData[key] === undefined) return '';
-                const isActive = outputData[key] === true || outputData[key] === 1;
-                return `
-                    <div class="io-item">
-                        <div class="io-indicator ${isActive ? 'active' : ''}"></div>
-                        <div class="io-label">${key}</div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('output-coils').innerHTML = outputCoilsHtml || '<div class="no-data">No data</div>';
+            const data = { ...inputData, ...outputData };
+            for (const key of allKeys) {
+                const el = document.getElementById('io-' + key);
+                if (el) {
+                    const isActive = data[key] === true || data[key] === 1;
+                    if (isActive) {
+                        el.classList.add('active');
+                    } else {
+                        el.classList.remove('active');
+                    }
+                }
+            }
 
             // Update VERSION register
             if (outputData.VERSION !== undefined) {
@@ -557,6 +552,11 @@
         }
 
         function updateActiveRules(rules) {
+            // Only rebuild if changed
+            const rulesJson = JSON.stringify(rules || []);
+            if (rulesJson === lastRulesJson) return;
+            lastRulesJson = rulesJson;
+
             const container = document.getElementById('active-rules');
 
             if (!rules || rules.length === 0) {
@@ -572,6 +572,11 @@
         }
 
         function updateStateVariables(state) {
+            // Only rebuild if changed
+            const stateJson = JSON.stringify(state || {});
+            if (stateJson === lastStateJson) return;
+            lastStateJson = stateJson;
+
             const container = document.getElementById('state-variables');
 
             if (!state || Object.keys(state).length === 0) {
@@ -608,7 +613,21 @@
                 const response = await fetch('/api/logs');
                 const data = await response.json();
 
-                if (!data.logs || data.logs.length === 0) return;
+                if (data.logs && data.logs.length > 0) {
+                    // Check if newest log changed (last item after reverse = first item)
+                    const newestTimestamp = data.logs[data.logs.length - 1]?.timestamp || '';
+                    if (newestTimestamp === lastLogTimestamp) return;
+                    lastLogTimestamp = newestTimestamp;
+
+                    const html = data.logs.slice(-1000).reverse().map(log => {
+                        return `
+                            <div class="log-entry">
+                                <span class="log-timestamp">${log.timestamp || ''}</span>
+                                <span class="log-level ${log.level || 'INFO'}">${log.level || 'INFO'}</span>
+                                <span class="log-message">${log.message || ''}</span>
+                            </div>
+                        `;
+                    }).join('');
 
                 // Skip DOM update if nothing has changed
                 const newCount = data.total || data.logs.length;
@@ -662,6 +681,9 @@
             .then(() => loadInitialState())
             .then(() => {
                 connect();
+                // Fetch logs every second instead of on every WebSocket message
+                fetchLogs();
+                setInterval(fetchLogs, 1000);
             });
 
         // Refresh logs periodically

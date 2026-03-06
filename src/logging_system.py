@@ -212,19 +212,34 @@ class LogManager:
     def _load_logs_from_file(self) -> None:
         """Load event logs from persistent files on startup.
 
-        Loads from the backup (.old) file first, then the current file.
-        Entries older than retention_days are skipped.
+        Loads from all rotated log files within retention period, oldest first.
         """
-        cutoff = self._retention_cutoff()
+        log_dir = self.log_file.parent
+        base_name = self.log_file.stem  # system_events
 
-        # Load backup first (older logs), then current (newer logs)
+        # Find all rotated log files (system_events.YYYY-MM-DD*.jsonl)
+        rotated_files = sorted(log_dir.glob(f"{base_name}.*.jsonl"))
+
+        # Load rotated files first (oldest to newest based on filename)
+        for path in rotated_files:
+            self._load_single_log_file(path)
+
+        # Load legacy .old backup if it exists
         backup_file = Path(str(self.log_file) + '.old')
         for path in [backup_file, self.log_file]:
             if path.exists():
                 self._load_single_log_file(path, cutoff=cutoff)
 
-    def _load_single_log_file(self, file_path: Path, cutoff: float = 0.0) -> None:
-        """Load logs from a single file, skipping entries older than cutoff."""
+        # Load current file last (newest)
+        if self.log_file.exists():
+            self._load_single_log_file(self.log_file)
+
+    def _load_single_log_file(self, file_path: Path) -> None:
+        """Load logs from a single file.
+
+        Args:
+            file_path: Path to log file to load
+        """
         try:
             with open(file_path, 'r') as f:
                 for line in f:
