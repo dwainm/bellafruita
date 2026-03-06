@@ -423,6 +423,13 @@ class StartMovingC3toC2AfterDelay(Rule):
         # Safety delay between motors
         time.sleep(2.0)
 
+        # Guard: abort if mode changed during the sleep (e.g. emergency stop, manual)
+        if mem.mode() != 'MOVING_C3_TO_C2':
+            controller.log_manager.warning(
+                f"Mode changed to '{mem.mode()}' during Motor 3 safety delay - aborting Motor 3 start"
+            )
+            return
+
         # Start MOTOR_3 after delay
         controller.log_manager.info("Motor 3 started after 2 second delay")
         procon.set('MOTOR_3', True)
@@ -444,7 +451,7 @@ class CompleteMoveC3toC2(Rule):
         """Check if C3→C2 move is complete."""
         return (
             mem.mode() == 'MOVING_C3_TO_C2' and
-            not procon.get('S2')  # Bin detected on C2
+            procon.falling_edge('S2')  # Bin just arrived on C2 (True→False edge)
         )
 
     def action(self, controller, procon, mem):
@@ -597,6 +604,13 @@ class StartMovingMotor3AfterDelay(Rule):
         # Safety delay before starting Motor 3
         time.sleep(2.0)
 
+        # Guard: abort if mode changed during the sleep (e.g. emergency stop, manual)
+        if mem.mode() != 'MOVING_BOTH':
+            controller.log_manager.warning(
+                f"Mode changed to '{mem.mode()}' during Motor 3 safety delay - aborting Motor 3 start"
+            )
+            return
+
         # Start MOTOR_3
         controller.log_manager.info("Motor 3 started after 2 second delay")
         procon.set('MOTOR_3', True)
@@ -617,8 +631,8 @@ class CompleteMoveBoth(Rule):
         """Check if both bins move is complete."""
         return (
             mem.mode() == 'MOVING_BOTH' and
-            procon.get('S1') and      # C3 is empty (no bin)
-            not procon.get('S2')      # C2 has bin (bin present)
+            procon.get('S1') and           # C3 is empty (no bin)
+            procon.falling_edge('S2')      # C3 bin just arrived at C2 (True→False edge)
         )
 
     def action(self, controller, procon, mem):
