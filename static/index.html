@@ -511,6 +511,18 @@
         let lastLogCount = 0;
         let lastLogDate = '';
         let currentLogFile = '';
+        let systemLogInitialLoad = true;
+        let logFileViewerInitialLoad = true;
+
+        // Check if user is scrolled near the bottom of an element
+        function isNearBottom(element, threshold = 50) {
+            return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
+        }
+
+        // Scroll element to the bottom
+        function scrollToBottom(element) {
+            element.scrollTop = element.scrollHeight;
+        }
 
         async function loadConfig() {
             try {
@@ -759,10 +771,10 @@
                 lastLogDate = newestDate;
 
                 const logPanel = document.getElementById('system-log').closest('.log-panel');
-                const atTop = logPanel.scrollTop < 40;
+                const wasNearBottom = isNearBottom(logPanel);
 
                 let currentDate = '';
-                const html = data.logs.slice(-2000).reverse().map(log => {
+                const html = data.logs.slice(-2000).map(log => {
                     let dateHeader = '';
                     const logDate = log.date || '';
                     if (logDate && logDate !== currentDate) {
@@ -778,8 +790,13 @@
 
                 document.getElementById('system-log').innerHTML = html;
 
-                // Only jump to top if user was already there
-                if (atTop) logPanel.scrollTop = 0;
+                // On initial load, scroll to bottom. On subsequent updates, only auto-scroll if user was near bottom
+                if (systemLogInitialLoad) {
+                    scrollToBottom(logPanel);
+                    systemLogInitialLoad = false;
+                } else if (wasNearBottom) {
+                    scrollToBottom(logPanel);
+                }
             } catch (error) {
                 console.error('Failed to fetch logs:', error);
             }
@@ -838,6 +855,7 @@
 
         async function loadLogFile(filename) {
             currentLogFile = filename;
+            logFileViewerInitialLoad = true;  // Reset so we scroll to bottom when loading a new file
             document.getElementById('log-reader-file-title').textContent = filename;
 
             // Refresh active highlight
@@ -862,8 +880,11 @@
                     return;
                 }
 
+                const contentPanel = entriesEl.closest('.log-reader-content');
+                const wasNearBottom = isNearBottom(contentPanel);
+
                 let currentDate = '';
-                const html = logs.slice().reverse().map(log => {
+                const html = logs.map(log => {
                     let dateHeader = '';
                     if (log.date && log.date !== currentDate) {
                         currentDate = log.date;
@@ -878,6 +899,14 @@
                 }).join('');
 
                 entriesEl.innerHTML = html;
+
+                // On initial load of a file or if user was near bottom, scroll to bottom
+                if (logFileViewerInitialLoad) {
+                    scrollToBottom(contentPanel);
+                    logFileViewerInitialLoad = false;
+                } else if (wasNearBottom) {
+                    scrollToBottom(contentPanel);
+                }
             } catch (error) {
                 entriesEl.innerHTML = '<div class="no-data">Failed to load file entries</div>';
                 console.error('Failed to load log file:', error);
