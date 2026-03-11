@@ -76,7 +76,6 @@ class MockControlServer:
                 raise HTTPException(status_code=404, detail="Input not found (valid: 1-16)")
             self.mock_input_client.set_input_state(input_number, request.value)
             input_info = self.mock_input_client.get_input_info(input_number)
-            self.log_manager.debug(f"Mock: Set {input_info.get('label', f'Input {input_number}')} = {request.value}")
             return {
                 'success': True,
                 'input_number': input_number,
@@ -91,7 +90,6 @@ class MockControlServer:
         @self.app.post("/api/registers/version")
         async def set_version_register(request: RegisterValueRequest):
             self.mock_output_client.set_register(0, request.value)
-            self.log_manager.debug(f"Mock: Set VERSION register = {request.value}")
             return {'success': True, 'address': 0, 'value': request.value}
 
     def run(self):

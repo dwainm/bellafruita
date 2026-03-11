@@ -131,7 +131,13 @@ class PollingThread(threading.Thread):
                     input_data = {}
                     output_data = {}
 
-                # ALWAYS evaluate rules, even during comms failure
+                # Log I/O changes FIRST (smart logging - only logs when values change)
+                # This shows the CAUSE before the EFFECT (rule actions)
+                if input_data or output_data:
+                    io_combined = {**input_data, **output_data}
+                    self.controller.log_manager.log_io_changes(io_combined)
+
+                # THEN evaluate rules (which may react to I/O changes)
                 # This allows CommsResetRule to detect operator acknowledgment via Auto_Select switch
                 if self.rule_engine:
                     sensor_data = {**input_data, **output_data}
@@ -147,6 +153,10 @@ class PollingThread(threading.Thread):
                         self.state.update_rule_state(
                             self.rule_engine.get_state(),
                             self.rule_engine.get_active_rules()
+                        )
+                        # Log memory state changes (smart logging)
+                        self.controller.log_manager.log_mem_changes(
+                            self.rule_engine.get_state()
                         )
                     else:
                         # Fallback: use controller's comms check

@@ -217,7 +217,7 @@ class WebDashboard:
             try:
                 with open(flag_file, 'w') as f:
                     f.write('1')
-                self.log_manager.info(f"Created KLAAR_GEWEEG flag file: {flag_file}")
+                self.log_manager.debug(f"Created KLAAR_GEWEEG flag file: {flag_file}")
                 return {"success": True, "klaar_geweeg": True}
             except Exception as e:
                 self.log_manager.error(f"Failed to create KLAAR_GEWEEG flag file: {e}")
@@ -228,7 +228,7 @@ class WebDashboard:
             """WebSocket endpoint for real-time state updates."""
             await websocket.accept()
             self.active_connections.append(websocket)
-            self.log_manager.info(f"Web client connected (total: {len(self.active_connections)})")
+            self.log_manager.debug(f"Web client connected (total: {len(self.active_connections)})")
 
             try:
                 # Send initial state immediately
@@ -248,7 +248,7 @@ class WebDashboard:
 
             except WebSocketDisconnect:
                 self.active_connections.remove(websocket)
-                self.log_manager.info(f"Web client disconnected (total: {len(self.active_connections)})")
+                self.log_manager.debug(f"Web client disconnected (total: {len(self.active_connections)})")
             except Exception as e:
                 self.log_manager.error(f"WebSocket error: {e}")
                 if websocket in self.active_connections:

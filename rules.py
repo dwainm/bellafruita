@@ -54,7 +54,7 @@ class CommsHealthCheckRule(Rule):
         if not comms_healthy and mem.mode() not in ['ERROR_COMMS', 'ERROR_COMMS_ACK']:
             # Comms have failed - enter ERROR_COMMS mode
             mem.set_mode('ERROR_COMMS')
-            controller.log_manager.critical("Communications FAILED - VERSION=0 for 10+ seconds. Disconnecting and attempting reconnection...")
+            controller.log_manager.critical("[ERROR_COMMS] VERSION=0 for 10+ seconds - disconnecting")
             # Stop all motors for safety
             controller.emergency_stop_all_motors()
             # Disconnect
@@ -62,12 +62,12 @@ class CommsHealthCheckRule(Rule):
             controller.output_client.close()
         elif comms_healthy and mem.mode() == 'ERROR_COMMS':
             # Comms have recovered! Wait for operator to acknowledge by flipping to Manual
-            controller.log_manager.info_once("Communications RESTORED - VERSION heartbeat detected. Flip switch to Manual to acknowledge.")
+            controller.log_manager.info_once("[ERROR_COMMS] Comms restored - flip to Manual to acknowledge")
             # Clear the reconnection message cache
-            controller.log_manager.clear_logged_once(message="Attempting to reconnect and restore communications...")
+            controller.log_manager.clear_logged_once(message="[ERROR_COMMS] Attempting reconnect...")
         elif mem.mode() == 'ERROR_COMMS':
             # In error mode and still unhealthy, keep trying to reconnect
-            controller.log_manager.info_once("Attempting to reconnect and restore communications...")
+            controller.log_manager.info_once("[ERROR_COMMS] Attempting reconnect...")
 
             # Try to reconnect if not already connected
             try:
@@ -103,12 +103,10 @@ class KlaarGeweegFlagRule(Rule):
         if os.path.exists(flag_file):
             try:
                 # Set in rule engine memory
-                controller.log_manager.info(f"Before set: KLAAR_GEWEEG = {mem.get('KLAAR_GEWEEG')}")
                 mem.set('KLAAR_GEWEEG', True)
-                controller.log_manager.info(f"After set: KLAAR_GEWEEG = {mem.get('KLAAR_GEWEEG')}")
                 # Delete the flag file
                 os.remove(flag_file)
-                controller.log_manager.info("KLAAR_GEWEEG flag detected and set in memory")
+                controller.log_manager.info("[READY] KLAAR_GEWEEG flag received")
             except Exception as e:
                 controller.log_manager.error(f"Failed to process KLAAR_GEWEEG flag file: {e}")
                 import traceback
@@ -127,7 +125,7 @@ class CommsAcknowledgeRule(Rule):
     def action(self, controller, procon, mem):
         """Move to acknowledged state."""
         mem.set_mode('ERROR_COMMS_ACK')
-        controller.log_manager.info("Comms failure ACKNOWLEDGED - turn auto_start switch back ON to reset")
+        controller.log_manager.info("[ERROR_COMMS_ACK] Turn auto switch ON to reset")
 
 
 class CommsResetRule(Rule):
@@ -144,10 +142,10 @@ class CommsResetRule(Rule):
         comms_healthy = controller.log_manager.check_comms_health(timeout_seconds=10.0)
 
         if comms_healthy:
-            controller.log_manager.info("Communications RESTORED and RESET - returning to READY")
+            controller.log_manager.info("[READY] Communications restored and reset")
             mem.set_mode('READY')
         else:
-            controller.log_manager.warning("Cannot reset - VERSION heartbeat still not detected, returning to ERROR_COMMS")
+            controller.log_manager.warning("[ERROR_COMMS] Cannot reset - no heartbeat")
             # Go back to ERROR_COMMS to continue reconnection attempts
             mem.set_mode('ERROR_COMMS')
 
@@ -190,12 +188,24 @@ class ReadyRule(Rule):
 
         return safety_ok and can_transition
 
+    def get_conditions(self, procon, mem):
+        current_mode = mem.mode()
+        return {
+            'auto_select': procon.get('Auto_Select'),
+            'e_stop_ok': procon.get('E_Stop'),
+            'm1_trip_ok': procon.get('M1_Trip'),
+            'm2_trip_ok': procon.get('M2_Trip'),
+            'dhlm_trip_ok': procon.get('DHLM_Trip_Signal'),
+            'can_transition': current_mode in (None, 'MANUAL', 'ERROR_SAFETY'),
+            'current_mode': current_mode
+        }
+
     def action(self, controller, procon, mem):
         """Set mode to READY."""
         mem.set_mode('READY')
         procon.set('MOTOR_2', False)
         procon.set('MOTOR_3', False)
-        controller.log_manager.info("System is READY and Motors are OFF")
+        controller.log_manager.info("[READY] Motors OFF")
 
 
 class ManualModeRule(Rule):
@@ -243,6 +253,17 @@ class ClearReadyRule(Rule):
 
         return trip_violations and mem.mode() != 'ERROR_SAFETY'
 
+    def get_conditions(self, procon, mem):
+        return {
+            'm1_trip_violated': procon.extended_hold('M1_Trip', False, 1.0),
+            'm2_trip_violated': procon.extended_hold('M2_Trip', False, 1.0),
+            'dhlm_trip_violated': procon.extended_hold('DHLM_Trip_Signal', False, 1.0),
+            'm1_trip_current': procon.get('M1_Trip'),
+            'm2_trip_current': procon.get('M2_Trip'),
+            'dhlm_trip_current': procon.get('DHLM_Trip_Signal'),
+            'current_mode': mem.mode()
+        }
+
     def action(self, controller, procon, mem):
         """Set mode to ERROR_SAFETY and stop motors."""
         # Identify which specific safety conditions are violated
@@ -286,9 +307,9 @@ class ClearReadyRule(Rule):
         # Log specific violations
         if violations:
             violation_msg = ", ".join(violations)
-            controller.log_manager.warning(f"Safety violated - mode set to ERROR_SAFETY: {violation_msg}")
+            controller.log_manager.warning(f"[ERROR_SAFETY] {violation_msg}")
         else:
-            controller.log_manager.warning("Safety violated - mode set to ERROR_SAFETY (reason unknown)")
+            controller.log_manager.warning("[ERROR_SAFETY] Unknown violation")
 
 class C3ReadyTimerStart(Rule):
     """Start C3 timer when S1 is broken."""
@@ -305,7 +326,7 @@ class C3ReadyTimerStart(Rule):
 
     def action(self, controller, procon, mem):
         mem.set('C3_Timer', time.time())
-        controller.log_manager.debug("C3_Timer - Started")
+        controller.log_manager.debug("[C3] Crate placed - 30s timer started")
 
 class C3ReadyTimerReset(Rule):
     """Reset C3 timer when S1 is made."""
@@ -321,7 +342,7 @@ class C3ReadyTimerReset(Rule):
 
     def action(self, controller, procon, mem):
         mem.set('C3_Timer', None)
-        controller.log_manager.debug("C3_Timer - Reset")
+        controller.log_manager.debug("[C3] Crate removed - timer reset")
 
 class CratePositionsSensorLedOn(Rule):
     """Turn on crate position LED when crates aren't positioned correctly."""
@@ -375,13 +396,20 @@ class InitiateMoveC3toC2(Rule):
             not procon.get('S1') # Bin present on C3
         )
 
+    def get_conditions(self, procon, mem):
+        return {
+            'mode_ready': mem.mode() == 'READY',
+            'c2_empty': procon.get('S2'),
+            'bin_on_c3': not procon.get('S1')
+        }
+
     def action(self, controller, procon, mem):
         """Set mode to MOVING_C3_TO_C2 and schedule both motors to start after 30s."""
         mem.set_mode('MOVING_C3_TO_C2')
 
         # For C3_TO_C2, bin just arrived on C3, so always use full 30 second delay
         remaining_delay = 30.0
-        log_msg = f"MOVING_C3_TO_C2 - Both motors will start in {remaining_delay:.1f}s"
+        log_msg = f"[MOVING_C3_TO_C2] Both motors will start in {remaining_delay:.1f}s"
 
         # Store when motors should start (PLC-style timer using timestamp)
         motors_start_time = time.time() + remaining_delay
@@ -430,7 +458,7 @@ class StartMovingC3toC2AfterDelay(Rule):
         procon.set('MOTOR_3', True)
 
         # Log completion with actual delay value
-        log_msg = f"Started MOVING_C3_TO_C2 - Motor 2 started, Motor 3 started after {remaining_delay:.1f}s"
+        log_msg = f"[MOVING_C3_TO_C2] Motors started after {remaining_delay:.1f}s delay"
         controller.log_manager.info(log_msg)
         mem.set('C3toC2_Delay', None)
 
@@ -448,6 +476,12 @@ class CompleteMoveC3toC2(Rule):
             not procon.get('S2')  # Bin detected on C2
         )
 
+    def get_conditions(self, procon, mem):
+        return {
+            'mode_moving_c3_to_c2': mem.mode() == 'MOVING_C3_TO_C2',
+            'bin_arrived_c2': not procon.get('S2')
+        }
+
     def action(self, controller, procon, mem):
         """Stop both motors and return to READY."""
         procon.set('MOTOR_2', False)
@@ -455,7 +489,7 @@ class CompleteMoveC3toC2(Rule):
         # Clear C3toC2 timer to prevent motors from starting after completion
         mem.set('C3toC2_StartTime', None)
         mem.set('C3toC2_Delay', None)
-        controller.log_manager.info("Completed MOVING_C3_TO_C2 - both motors stopped")
+        controller.log_manager.info("[MOVING_C3_TO_C2] Completed - both motors stopped")
         mem.set_mode('READY')
 
 
@@ -479,6 +513,15 @@ class InitiateMoveC2toPalm(Rule):
 
         return mode_ready and s1 and not s2 and klaar and palm
 
+    def get_conditions(self, procon, mem):
+        return {
+            'mode_ready': mem.mode() == 'READY',
+            'c3_empty': procon.get('S1'),
+            'bin_on_c2': not procon.get('S2'),
+            'klaar_geweeg': mem.get('KLAAR_GEWEEG'),
+            'palm_running_2s': procon.extended_hold('PALM_Run_Signal', True, 2.0)
+        }
+
     def action(self, controller, procon, mem):
         """Start MOTOR_2 and set mode to MOVING_C2_TO_PALM."""
         if not mem.mode().startswith('ERROR_'):
@@ -486,7 +529,7 @@ class InitiateMoveC2toPalm(Rule):
             mem.set_mode('MOVING_C2_TO_PALM')
             # Reset flag after starting move
             mem.set('KLAAR_GEWEEG', False)
-            controller.log_manager.info_once("Started MOVING_C2_TO_PALM - MOTOR_2 running")
+            controller.log_manager.info_once("[MOVING_C2_TO_PALM] Started - MOTOR_2 running")
 
 
 class CompleteMoveC2toPalm(Rule):
@@ -502,19 +545,25 @@ class CompleteMoveC2toPalm(Rule):
             procon.get('S2')  # Bin left C2
         )
 
+    def get_conditions(self, procon, mem):
+        return {
+            'mode_moving_c2_to_palm': mem.mode() == 'MOVING_C2_TO_PALM',
+            'bin_left_c2': procon.get('S2')
+        }
+
     def action(self, controller, procon, mem):
         """Stop MOTOR_2 and return to READY."""
         # Delayed stop for MOTOR_2 (1 second)
         def stop_motor_2():
             procon.set('MOTOR_2', False)
-            controller.log_manager.info_once("MOTOR_2 stopped after 1s delay")
+            controller.log_manager.info_once("[MOVING_C2_TO_PALM] Completed - MOTOR_2 stopped")
             mem.set_mode('READY')
             # Clear the log_once cache for next cycle
-            controller.log_manager.clear_logged_once(message="Started MOVING_C2_TO_PALM - MOTOR_2 running")
-            controller.log_manager.clear_logged_once(message="MOVING_C2_TO_PALM - MOTOR_2 will stop in 1 seconds.")
+            controller.log_manager.clear_logged_once(message="[MOVING_C2_TO_PALM] Started - MOTOR_2 running")
+            controller.log_manager.clear_logged_once(message="[MOVING_C2_TO_PALM] MOTOR_2 stopping in 1s")
 
         Timer(1.0, stop_motor_2).start()
-        controller.log_manager.info_once("MOVING_C2_TO_PALM - MOTOR_2 will stop in 1 seconds.")
+        controller.log_manager.info_once("[MOVING_C2_TO_PALM] MOTOR_2 stopping in 1s")
 
 class InitiateMoveBoth(Rule):
     """Start moving both bins simultaneously."""
@@ -536,6 +585,15 @@ class InitiateMoveBoth(Rule):
 
         return mode_ready and not s1 and not s2 and klaar and palm
 
+    def get_conditions(self, procon, mem):
+        return {
+            'mode_ready': mem.mode() == 'READY',
+            'bin_on_c3': not procon.get('S1'),
+            'bin_on_c2': not procon.get('S2'),
+            'klaar_geweeg': mem.get('KLAAR_GEWEEG'),
+            'palm_running_2s': procon.extended_hold('PALM_Run_Signal', True, 2.0)
+        }
+
     def action(self, controller, procon, mem):
         """Start MOTOR_2 immediately, delay MOTOR_3 to ensure bin on C3 for 30s total."""
         mem.set_mode('MOVING_BOTH')
@@ -551,13 +609,13 @@ class InitiateMoveBoth(Rule):
             elapsed = time.time() - c3_timer_start
             # Ensure bin is on C3 for 30 seconds total
             remaining_delay = max(0, 30.0 - elapsed)
-            log_msg = f"MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s (bin on C3 for {elapsed:.1f}s)"
+            log_msg = f"[MOVING_BOTH] MOTOR_2 started, MOTOR_3 in {remaining_delay:.1f}s (bin on C3 for {elapsed:.1f}s)"
         else:
             # Fallback if timer not found (shouldn't happen)
             elapsed = 0
             remaining_delay = 30.0
-            controller.log_manager.warning("C3_Timer not found, using default 30s delay")
-            log_msg = f"MOVING_BOTH - Motor 2 started, Motor 3 will start in {remaining_delay:.1f}s"
+            controller.log_manager.warning("[MOVING_BOTH] C3_Timer not found, using 30s default")
+            log_msg = f"[MOVING_BOTH] MOTOR_2 started, MOTOR_3 in {remaining_delay:.1f}s"
 
 
         # Store when Motor 3 should start (PLC-style timer using timestamp)
@@ -605,7 +663,7 @@ class StartMovingMotor3AfterDelay(Rule):
         procon.set('MOTOR_3', True)
 
         # Log with actual delay value
-        log_msg = f"{mode} - Motor 3 started after {remaining_delay:.1f}s"
+        log_msg = f"[{mode}] MOTOR_3 started after {remaining_delay:.1f}s delay"
         controller.log_manager.info(log_msg)
         mem.set('Motor3_Delay', None)
 
@@ -623,6 +681,13 @@ class CompleteMoveBoth(Rule):
             not procon.get('S2')      # C2 has bin (bin present)
         )
 
+    def get_conditions(self, procon, mem):
+        return {
+            'mode_moving_both': mem.mode() == 'MOVING_BOTH',
+            'c3_empty': procon.get('S1'),
+            'bin_arrived_c2': not procon.get('S2')
+        }
+
     def action(self, controller, procon, mem):
         """Stop MOTOR 2 and 3 immediately."""
         procon.set('MOTOR_3', False)
@@ -630,7 +695,7 @@ class CompleteMoveBoth(Rule):
         # Clear Motor3 timer to prevent it from starting after completion
         mem.set('Motor3_StartTime', None)
         mem.set('Motor3_Delay', None)
-        controller.log_manager.info("MOVING_BOTH - Completed. MOTOR_3 and MOTOR_2 stopped.")
+        controller.log_manager.info("[MOVING_BOTH] Completed - both motors stopped")
         mem.set_mode('READY')
 
 
@@ -648,6 +713,13 @@ class EmergencyStopRule(Rule):
         """
         return procon.extended_hold('E_Stop', False, 1.0)
 
+    def get_conditions(self, procon, mem):
+        return {
+            'e_stop_held_1s': procon.extended_hold('E_Stop', False, 1.0),
+            'e_stop_current': procon.get('E_Stop'),
+            'current_mode': mem.mode()
+        }
+
     def action(self, controller, procon, mem):
         if  mem.mode() != 'ERROR_ESTOP': # Avoid duplicate actions and errors.
             """Stop all motors and set mode to ERROR_ESTOP."""
@@ -655,7 +727,7 @@ class EmergencyStopRule(Rule):
             # Clear all memory and set ERROR_ESTOP mode
             mem.clear()
             mem.set_mode('ERROR_ESTOP')
-            controller.log_manager.critical("EMERGENCY STOP activated! Reset required to restart.")
+            controller.log_manager.critical("[ERROR_ESTOP] Emergency stop activated")
 
 class EmergencyStopResetRule(Rule):
     """Reset ERROR_ESTOP when operator cycles Auto_Select and E_Stop is released."""
@@ -674,7 +746,7 @@ class EmergencyStopResetRule(Rule):
     def action(self, controller, procon, mem):
         """Clear ERROR_ESTOP mode."""
         mem.set_mode(None)
-        controller.log_manager.info("Emergency stop RESET")
+        controller.log_manager.info("[READY] Emergency stop reset")
 
 
 # Function to create all rules and add to engine
