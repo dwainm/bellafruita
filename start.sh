@@ -13,10 +13,6 @@ case "$1" in
   MODE="web"
   shift # Remove mode flag
   ;;
---tui | tui)
-  MODE="tui"
-  shift
-  ;;
 --logs | logs)
   MODE="logs"
   shift
@@ -28,8 +24,7 @@ case "$1" in
   echo "  ./start.sh [MODE] [OPTIONS]"
   echo ""
   echo "Modes:"
-  echo "  tui   - Textual Terminal UI (default)"
-  echo "  web   - Web Dashboard (browser-based) - port 7681"
+  echo "  web   - Web Dashboard (browser-based, default) - port 7681"
   echo "  logs  - Headless logs-only mode"
   echo ""
   echo "Options:"
@@ -37,12 +32,10 @@ case "$1" in
   echo "  --mock        - Run with mock/simulated PLC data"
   echo ""
   echo "Examples:"
-  echo "  ./start.sh              # Start TUI mode (default)"
-  echo "  ./start.sh tui          # Start TUI mode explicitly"
+  echo "  ./start.sh              # Start web dashboard (default)"
   echo "  ./start.sh web          # Start web dashboard on port 7681"
   echo "  ./start.sh web --port 9000  # Web on custom port"
   echo "  ./start.sh logs         # Headless logs-only"
-  echo "  ./start.sh tui --mock   # TUI with mock data"
   echo "  ./start.sh web --mock --port 8080  # Web with mock data on port 8080"
   echo ""
   exit 0
@@ -51,13 +44,10 @@ esac
 
 # Delegate to appropriate start script
 case "$MODE" in
-web)
-  exec ./start-web.sh "$@"
-  ;;
 logs)
   exec ./start-logs.sh "$@"
   ;;
-tui | *)
-  exec ./start-tui.sh "$@"
+web | *)
+  exec ./start-web.sh "$@"
   ;;
 esac

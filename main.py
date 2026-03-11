@@ -5,7 +5,6 @@ import os
 from config import AppConfig
 from src.modbus import create_modbus_client, Procon, MODBUS_MAP, get_all_labels
 from src.logging_system import LogManager
-from src.tui import run_tui
 from src.rule_engine import RuleEngine
 from src.polling_thread import PollingThread, SystemState
 
@@ -185,9 +184,9 @@ def main():
     )
     parser.add_argument(
         '--view',
-        choices=['tui', 'web', 'logs'],
-        default='tui',
-        help='UI mode: tui (textual interface), web (browser dashboard), logs (headless)'
+        choices=['web', 'logs'],
+        default='web',
+        help='UI mode: web (browser dashboard), logs (headless)'
     )
     parser.add_argument(
         '--port',
@@ -256,7 +255,7 @@ def main():
 
             run_web_dashboard(shared_state, controller.log_manager, config, port=args.port)
 
-        elif args.view == 'logs':
+        else:  # args.view == 'logs'
             # Headless logs-only mode
             controller.log_manager.info("Starting in LOGS-ONLY mode (headless)")
             controller.log_manager.info("Press Ctrl+C to stop")
@@ -264,17 +263,6 @@ def main():
             import time
             while True:
                 time.sleep(1)
-
-        else:  # args.view == 'tui' (default)
-            # Textual TUI mode (editable in mock mode, read-only in real mode)
-            controller.log_manager.info("Starting in TUI mode")
-            run_tui(
-                controller=controller,
-                rule_engine=rule_engine,
-                config=config,
-                editable=config.use_mock,
-                shared_state=shared_state
-            )
 
     except KeyboardInterrupt:
         controller.log_manager.info("Shutting down")

@@ -3,12 +3,12 @@
 Industrial control system for apple sorting machine. Controls bin movement between conveyors (C3→C2→PALM) via Modbus TCP to Procon terminals.
 
 ## Tech Stack
-- Python 3.9+, PyModbus, Textual (TUI), FastAPI (web), Uvicorn
+- Python 3.9+, PyModbus, FastAPI (web), Uvicorn
 - Hardware: Procon Modbus PLCs, Raspberry Pi
 
 ## Project Structure
 ```
-main.py          - Entry point, CLI args (--mock, --view tui/web/logs)
+main.py          - Entry point, CLI args (--mock, --view web/logs)
 rules.py         - 21 PLC ladder-logic rules (sequential, safety rules LAST)
 io_mapping.py    - Modbus address↔label mapping (16 inputs, 4 outputs)
 config.py        - IPs, timeouts, settings
@@ -22,7 +22,6 @@ src/
   polling_thread.py - Background: read inputs → eval rules → write outputs
   mem.py         - Internal state storage (modes, timers)
   edge_detector.py - Rising/falling edge, hold detection
-  tui.py         - Textual terminal UI (live I/O, logs, mock switches)
   web_server.py  - FastAPI + WebSocket dashboard
   logging_system.py - Event logs, JSONL persistence
 
@@ -45,18 +44,18 @@ static/          - Web assets
 ## Running
 ```bash
 ./start.sh --mock           # Mock mode (no hardware)
-./start.sh --view tui       # Terminal UI
-./start.sh --view web       # Web dashboard :7681
-python main.py --mock --view tui  # Direct
+./start.sh --view web       # Web dashboard :7681 (default)
+./start.sh --view logs      # Headless logs-only mode
+python main.py --mock --view web  # Direct
 ```
 
 ## Architecture
 ```
-UI (TUI/Web) ← reads ← SystemState ← updates ← PollingThread
-                                                    ↓
-                                              RuleEngine (21 rules)
-                                                    ↓
-                                              Modbus (Procon API)
-                                                    ↓
-                                              PLC Hardware
+UI (Web) ← reads ← SystemState ← updates ← PollingThread
+                                                ↓
+                                          RuleEngine (21 rules)
+                                                ↓
+                                          Modbus (Procon API)
+                                                ↓
+                                          PLC Hardware
 ```
