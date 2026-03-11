@@ -417,6 +417,9 @@ class StartMovingC3toC2AfterDelay(Rule):
         # Clear timers to avoid starting again
         mem.set('C3toC2_StartTime', None)
 
+        # Get the stored delay value
+        remaining_delay = mem.get('C3toC2_Delay')
+
         # Start MOTOR_2 first
         procon.set('MOTOR_2', True)
 
@@ -424,12 +427,10 @@ class StartMovingC3toC2AfterDelay(Rule):
         time.sleep(2.0)
 
         # Start MOTOR_3 after delay
-        controller.log_manager.info("Motor 3 started after 2 second delay")
         procon.set('MOTOR_3', True)
 
-        # Log completion
-        remaining_delay = mem.get('C3toC2_Delay')
-        log_msg = f"Started MOVING_C3_TO_C2 - Motor 2 started, Motor 3 started after 2s safety delay (total delay {remaining_delay:.1f}s)"
+        # Log completion with actual delay value
+        log_msg = f"Started MOVING_C3_TO_C2 - Motor 2 started, Motor 3 started after {remaining_delay:.1f}s"
         controller.log_manager.info(log_msg)
         mem.set('C3toC2_Delay', None)
 
@@ -594,18 +595,19 @@ class StartMovingMotor3AfterDelay(Rule):
         # Clear timers to avoid starting again.
         mem.set('Motor3_StartTime', None)
 
+        # Get the stored delay value
+        remaining_delay = mem.get('Motor3_Delay')
+
         # Safety delay before starting Motor 3
         time.sleep(2.0)
 
         # Start MOTOR_3
-        controller.log_manager.info("Motor 3 started after 2 second delay")
         procon.set('MOTOR_3', True)
 
-        # Calculate how long bin has been on C3
-        remaining_delay = mem.get('Motor3_Delay')
-        log_msg = f"Started {mode} - Motor 3 started after {remaining_delay:.1f}s"
+        # Log with actual delay value
+        log_msg = f"{mode} - Motor 3 started after {remaining_delay:.1f}s"
         controller.log_manager.info(log_msg)
-        mem.set('Motor3_Delay', None)  # Store for logging
+        mem.set('Motor3_Delay', None)
 
 class CompleteMoveBoth(Rule):
     """Complete moving both bins with delayed MOTOR_2 stop."""
@@ -628,7 +630,7 @@ class CompleteMoveBoth(Rule):
         # Clear Motor3 timer to prevent it from starting after completion
         mem.set('Motor3_StartTime', None)
         mem.set('Motor3_Delay', None)
-        controller.log_manager.info("Completed MOVING_BOTH - MOTOR_3 and MOTOR_2 stopped.")
+        controller.log_manager.info("MOVING_BOTH - Completed. MOTOR_3 and MOTOR_2 stopped.")
         mem.set_mode('READY')
 
 
