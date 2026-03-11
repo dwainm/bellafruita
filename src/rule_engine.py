@@ -64,6 +64,21 @@ class Rule:
         """
         return False
 
+    def get_conditions(self, procon, mem: MachineMemory) -> Dict[str, Any]:
+        """Return condition details for DEBUG logging.
+        
+        Override this in subclasses to provide meaningful condition breakdowns.
+        Called only when the rule's condition() returns True.
+        
+        Args:
+            procon: Procon API for reading I/O
+            mem: Machine memory for reading internal state
+            
+        Returns:
+            Dict of condition names to their evaluated values
+        """
+        return {}
+
     def action(self, controller, procon, mem: MachineMemory) -> None:
         """Execute rule action.
 
@@ -157,11 +172,42 @@ class RuleEngine:
                     rule.last_triggered = time.time()
                     rule.trigger_count += 1
 
+                    # Log DEBUG with full context (file only)
+                    conditions = rule.get_conditions(procon, self.mem)
+                    if conditions:  # Only log if rule provides conditions
+                        self.controller.log_manager.debug_rule(
+                            rule_name=rule.name,
+                            conditions=conditions,
+                            mem_state=self.mem._state.copy(),
+                            io_state=self._get_io_snapshot(procon)
+                        )
+
                     # Execute rule action (like ladder coil)
                     rule.action(self.controller, procon, self.mem)
 
             except Exception as e:
                 self.controller.log_manager.error(f"Error in rule '{rule.name}': {e}")
+
+    def _get_io_snapshot(self, procon) -> Dict[str, Any]:
+        """Get current I/O state snapshot for DEBUG logging.
+        
+        Args:
+            procon: Procon API instance
+            
+        Returns:
+            Dict with all input and output coil states
+        """
+        io_state = {}
+        try:
+            # Get all input coils
+            input_coils = procon.get_all('INPUT', 'coils')
+            io_state.update(input_coils)
+            # Get all output coils
+            output_coils = procon.get_all('OUTPUT', 'coils')
+            io_state.update(output_coils)
+        except Exception:
+            pass
+        return io_state
 
     def get_active_rules(self) -> list[str]:
         """Get list of currently triggered rule names.

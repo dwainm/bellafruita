@@ -27,8 +27,9 @@ class LogEntry:
 class EventEntry:
     """Single event log entry for system events."""
     timestamp: float
-    level: str  # "INFO", "WARNING", "ERROR", "CRITICAL"
+    level: str  # "INFO", "WARNING", "ERROR", "CRITICAL", "DEBUG"
     message: str
+    context: Optional[Dict[str, Any]] = None  # Additional context for DEBUG logs
 
     def get_formatted_time(self) -> str:
         """Get formatted timestamp string."""
@@ -135,14 +136,17 @@ class LogManager:
         """Get timestamp of last output log."""
         return self.output_logs[-1].timestamp if self.output_logs else 0
 
-    def log_event(self, level: str, message: str) -> None:
-        """Log a system event."""
+    def log_event(self, level: str, message: str, **context) -> None:
+        """Log a system event with optional context."""
         entry = EventEntry(
             timestamp=time.time(),
             level=level.upper(),
-            message=message
+            message=message,
+            context=context if context else None
         )
-        self.event_logs.append(entry)
+        # Only add to in-memory logs if not DEBUG (UI never sees DEBUG)
+        if entry.level != "DEBUG":
+            self.event_logs.append(entry)
         self._append_log_to_file(entry)
 
     def info(self, message: str) -> None:
@@ -161,10 +165,72 @@ class LogManager:
         """Log a critical event."""
         self.log_event("CRITICAL", message)
 
-    def debug(self, message: str) -> None:
-        """Log a debug event (only when debug_mode is enabled)."""
-        if self.debug_mode:
-            self.log_event("DEBUG", message)
+    def debug(self, message: str, **context) -> None:
+        """Log a debug event - always writes to file, never shown in UI."""
+        self.log_event("DEBUG", message, **context)
+
+    def debug_rule(self, rule_name: str, conditions: Dict[str, Any], 
+                   mem_state: Dict[str, Any], io_state: Dict[str, Any]) -> None:
+        """Log DEBUG when a rule condition is met - file only.
+        
+        Args:
+            rule_name: Name of the rule that fired
+            conditions: Dict of condition names and their boolean values
+            mem_state: Current memory state snapshot
+            io_state: Current I/O state snapshot
+        """
+        self.log_event(
+            "DEBUG",
+            f"[Rule Triggered] {rule_name}",
+            rule=rule_name,
+            conditions=conditions,
+            mem_state=mem_state,
+            io_state=io_state
+        )
+
+    def log_io_changes(self, current_io: Dict[str, Any]) -> None:
+        """Log DEBUG for any I/O values that changed since last call.
+        
+        Args:
+            current_io: Current I/O state dict (inputs + outputs)
+        """
+        if not hasattr(self, '_prev_io'):
+            self._prev_io = {}
+        
+        changes = {}
+        for key, value in current_io.items():
+            if key not in self._prev_io or self._prev_io[key] != value:
+                changes[key] = {'from': self._prev_io.get(key), 'to': value}
+        
+        if changes:
+            # Build readable message: "I/O: S1=False, MOTOR_2=True"
+            change_strs = [f"{k}={v['to']}" for k, v in changes.items()]
+            msg = f"I/O: {', '.join(change_strs)}"
+            self.debug(msg, changes=changes)
+        
+        self._prev_io = current_io.copy()
+
+    def log_mem_changes(self, current_mem: Dict[str, Any]) -> None:
+        """Log DEBUG for any memory values that changed since last call.
+        
+        Args:
+            current_mem: Current memory state dict
+        """
+        if not hasattr(self, '_prev_mem'):
+            self._prev_mem = {}
+        
+        changes = {}
+        for key, value in current_mem.items():
+            if key not in self._prev_mem or self._prev_mem[key] != value:
+                changes[key] = {'from': self._prev_mem.get(key), 'to': value}
+        
+        if changes:
+            # Build readable message: "MEM: _MODE=MOVING, C3_Timer=12345"
+            change_strs = [f"{k}={v['to']}" for k, v in changes.items()]
+            msg = f"MEM: {', '.join(change_strs)}"
+            self.debug(msg, changes=changes)
+        
+        self._prev_mem = current_mem.copy()
 
     def log_once(self, level: str, message: str) -> bool:
         """Log a message only once, preventing duplicates."""
@@ -201,9 +267,23 @@ class LogManager:
             for key in to_remove:
                 self._logged_once.discard(key)
 
-    def get_recent_events(self, count: int = 2000) -> List[EventEntry]:
-        """Get most recent event logs."""
-        return list(self.event_logs)[-count:] if self.event_logs else []
+    def get_recent_events(self, count: int = 2000, include_debug: bool = False) -> List[EventEntry]:
+        """Get most recent event logs.
+        
+        Args:
+            count: Maximum number of events to return
+            include_debug: If True, include DEBUG events (default: False)
+            
+        Returns:
+            List of EventEntry objects, newest last
+            
+        Note: DEBUG events are not stored in memory (file-only), so include_debug
+              only affects future implementations if DEBUG storage changes.
+        """
+        events = list(self.event_logs)
+        if not include_debug:
+            events = [e for e in events if e.level != "DEBUG"]
+        return events[-count:] if events else []
 
     def _retention_cutoff(self) -> float:
         """Return the oldest timestamp we want to keep."""
@@ -279,6 +359,9 @@ class LogManager:
                     'message': entry.message,
                     'formatted_time': entry.get_formatted_time()
                 }
+                # Add context for DEBUG logs (rule, conditions, mem_state, io_state)
+                if entry.context:
+                    data.update(entry.context)
                 f.write(json.dumps(data) + '\n')
         except Exception:
             pass
