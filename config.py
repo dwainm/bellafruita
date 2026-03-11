@@ -25,19 +25,10 @@ class SystemConfig:
 
 
 @dataclass
-class TUIConfig:
-    """Terminal UI update rates."""
-    poll_rate: float = 0.1
-    log_refresh_rate: float = 3.0
-    heartbeat_reset_rate: float = 0.25
-
-
-@dataclass
 class AppConfig:
     """Complete application configuration."""
     modbus: ModbusConfig
     system: SystemConfig
-    tui: TUIConfig
     site_name: str = "Bella Fruita"
     use_mock: bool = False
     debug: bool = False
@@ -56,7 +47,6 @@ class AppConfig:
         return cls(
             modbus=ModbusConfig(),
             system=SystemConfig(),
-            tui=TUIConfig(),
             use_mock=use_mock,
             debug=debug
         )
