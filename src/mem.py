@@ -55,9 +55,9 @@ class MachineMemory:
             # Log the mode change if logger is available
             if self._logger:
                 if old_mode is None:
-                    self._logger.info(f"Mode: {mode}")
+                    self._logger.info(f"{mode}")
                 else:
-                    self._logger.info(f"Mode: {old_mode} -> {mode}")
+                    self._logger.info(f"{old_mode} -> {mode}")
         else:
             # Mode hasn't changed, just update (no-op really)
             self._state['_MODE'] = mode
