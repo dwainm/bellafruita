@@ -203,6 +203,59 @@ class Procon:
         except Exception:
             return False
 
+    def set_reliable(self, label: str, value: bool, retries: int = 3, delay_ms: float = 100) -> bool:
+        """Write motor state multiple times with delays for critical outputs.
+
+        This "triple-tap" pattern ensures motor commands get through even if
+        a single Modbus packet is lost. Includes debug logging for failures.
+
+        Args:
+            label: Motor label (e.g., 'MOTOR_2', 'MOTOR_3')
+            value: Boolean value to write
+            retries: Number of write attempts (default: 3)
+            delay_ms: Delay between writes in milliseconds (default: 100)
+
+        Returns:
+            bool: True if at least one write succeeded, False if all failed
+
+        Example:
+            >>> procon.set_reliable('MOTOR_2', False)  # Stop motor, triple-tap
+            True
+        """
+        successes = 0
+        failures = 0
+        last_error = None
+
+        for i in range(retries):
+            success = self.set(label, value)
+            if success:
+                successes += 1
+            else:
+                failures += 1
+                last_error = f"Write attempt {i+1}/{retries} failed"
+
+            # Delay between writes (but not after the last one)
+            if i < retries - 1:
+                time.sleep(delay_ms / 1000.0)
+
+        # Log results if there were any failures
+        if failures > 0:
+            if self.log_manager:
+                if successes > 0:
+                    # Partial success - log warning
+                    self.log_manager.warning(
+                        f"[Motor Write] {label}={value}: {successes}/{retries} succeeded, "
+                        f"{failures} failed. Last: {last_error}"
+                    )
+                else:
+                    # Total failure - log error
+                    self.log_manager.error(
+                        f"[Motor Write FAILED] {label}={value}: All {retries} attempts failed! "
+                        f"Motor may not have stopped/started!"
+                    )
+
+        return successes > 0
+
     def get_all(self, device: str, reg_type: str) -> dict:
         """Read all values of a specific type from a device.
 

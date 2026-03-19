@@ -126,9 +126,9 @@ class ConveyorController:
     def emergency_stop_all_motors(self) -> None:
         """Emergency stop - write False to all output coils."""
         try:
-            # Stop all motors using Procon API
+            # Stop all motors using reliable writes (triple-tap)
             for motor in ['MOTOR_2', 'MOTOR_3']:
-                self.procon.set('output', motor, False)
+                self.procon.set_reliable(motor, False)
             self.log_manager.info("All motors stopped")
         except Exception as e:
             self.log_manager.error(f"Error stopping motors: {e}")

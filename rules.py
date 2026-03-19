@@ -203,8 +203,8 @@ class ReadyRule(Rule):
     def action(self, controller, procon, mem):
         """Set mode to READY."""
         mem.set_mode('READY')
-        procon.set('MOTOR_2', False)
-        procon.set('MOTOR_3', False)
+        procon.set_reliable('MOTOR_2', False)
+        procon.set_reliable('MOTOR_3', False)
         controller.log_manager.info("[READY] Motors OFF")
 
 
@@ -225,8 +225,8 @@ class ManualModeRule(Rule):
 
     def action(self, controller, procon, mem):
         """Set mode to MANUAL and stop motors."""
-        procon.set('MOTOR_2', False)
-        procon.set('MOTOR_3', False)
+        procon.set_reliable('MOTOR_2', False)
+        procon.set_reliable('MOTOR_3', False)
         clear_klaar_geweeg(mem)
         mem.set_mode('MANUAL')
 
@@ -301,8 +301,8 @@ class ClearReadyRule(Rule):
 
         # Set error state and stop motors
         mem.set_mode('ERROR_SAFETY')
-        procon.set('MOTOR_2', False)
-        procon.set('MOTOR_3', False)
+        procon.set_reliable('MOTOR_2', False)
+        procon.set_reliable('MOTOR_3', False)
 
         # Log specific violations
         if violations:
@@ -448,14 +448,14 @@ class StartMovingC3toC2AfterDelay(Rule):
         # Get the stored delay value
         remaining_delay = mem.get('C3toC2_Delay')
 
-        # Start MOTOR_2 first
-        procon.set('MOTOR_2', True)
+        # Start MOTOR_2 first (reliable write)
+        procon.set_reliable('MOTOR_2', True)
 
         # Safety delay between motors
         time.sleep(2.0)
 
-        # Start MOTOR_3 after delay
-        procon.set('MOTOR_3', True)
+        # Start MOTOR_3 after delay (reliable write)
+        procon.set_reliable('MOTOR_3', True)
 
         # Log completion with actual delay value
         log_msg = f"[MOVING_C3_TO_C2] Motors started after {remaining_delay:.1f}s delay"
@@ -484,8 +484,8 @@ class CompleteMoveC3toC2(Rule):
 
     def action(self, controller, procon, mem):
         """Stop both motors and return to READY."""
-        procon.set('MOTOR_2', False)
-        procon.set('MOTOR_3', False)
+        procon.set_reliable('MOTOR_2', False)
+        procon.set_reliable('MOTOR_3', False)
         # Clear C3toC2 timer to prevent motors from starting after completion
         mem.set('C3toC2_StartTime', None)
         mem.set('C3toC2_Delay', None)
@@ -525,7 +525,7 @@ class InitiateMoveC2toPalm(Rule):
     def action(self, controller, procon, mem):
         """Start MOTOR_2 and set mode to MOVING_C2_TO_PALM."""
         if not mem.mode().startswith('ERROR_'):
-            procon.set('MOTOR_2', True)
+            procon.set_reliable('MOTOR_2', True)
             mem.set_mode('MOVING_C2_TO_PALM')
             # Reset flag after starting move
             mem.set('KLAAR_GEWEEG', False)
@@ -555,7 +555,7 @@ class CompleteMoveC2toPalm(Rule):
         """Stop MOTOR_2 and return to READY."""
         # Delayed stop for MOTOR_2 (1 second)
         def stop_motor_2():
-            procon.set('MOTOR_2', False)
+            procon.set_reliable('MOTOR_2', False)
             controller.log_manager.info_once("[MOVING_C2_TO_PALM] Completed - MOTOR_2 stopped")
             mem.set_mode('READY')
             # Clear the log_once cache for next cycle
@@ -600,8 +600,8 @@ class InitiateMoveBoth(Rule):
         # Reset flag after starting move
         mem.set('KLAAR_GEWEEG', False)
 
-        # Start MOTOR_2 immediately
-        procon.set('MOTOR_2', True)
+        # Start MOTOR_2 immediately (reliable write)
+        procon.set_reliable('MOTOR_2', True)
 
         # Calculate how long bin has been on C3
         c3_timer_start = mem.get('C3_Timer')
@@ -659,8 +659,8 @@ class StartMovingMotor3AfterDelay(Rule):
         # Safety delay before starting Motor 3
         time.sleep(2.0)
 
-        # Start MOTOR_3
-        procon.set('MOTOR_3', True)
+        # Start MOTOR_3 (reliable write)
+        procon.set_reliable('MOTOR_3', True)
 
         # Log with actual delay value
         log_msg = f"[{mode}] MOTOR_3 started after {remaining_delay:.1f}s delay"
@@ -690,8 +690,8 @@ class CompleteMoveBoth(Rule):
 
     def action(self, controller, procon, mem):
         """Stop MOTOR 2 and 3 immediately."""
-        procon.set('MOTOR_3', False)
-        procon.set('MOTOR_2', False)
+        procon.set_reliable('MOTOR_3', False)
+        procon.set_reliable('MOTOR_2', False)
         # Clear Motor3 timer to prevent it from starting after completion
         mem.set('Motor3_StartTime', None)
         mem.set('Motor3_Delay', None)
