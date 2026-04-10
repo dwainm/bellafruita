@@ -203,7 +203,7 @@ class Procon:
         except Exception:
             return False
 
-    def set_reliable(self, label: str, value: bool, retries: int = 3, delay_ms: float = 100) -> bool:
+    def set_reliable(self, label: str, value: bool, retries: int = 3, delay_ms: float = 20) -> bool:
         """Write motor state multiple times with delays for critical outputs.
 
         This "triple-tap" pattern ensures motor commands get through even if
@@ -213,7 +213,7 @@ class Procon:
             label: Motor label (e.g., 'MOTOR_2', 'MOTOR_3')
             value: Boolean value to write
             retries: Number of write attempts (default: 3)
-            delay_ms: Delay between writes in milliseconds (default: 100)
+            delay_ms: Delay between writes in milliseconds (default: 20)
 
         Returns:
             bool: True if at least one write succeeded, False if all failed
