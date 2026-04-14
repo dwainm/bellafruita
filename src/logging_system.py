@@ -171,23 +171,18 @@ class LogManager:
         """Log a debug event - always writes to file, never shown in UI."""
         self.log_event("DEBUG", message, **context)
 
-    def debug_rule(self, rule_name: str, conditions: Dict[str, Any], 
-                   mem_state: Dict[str, Any], io_state: Dict[str, Any]) -> None:
+    def debug_rule(self, rule_name: str, conditions: Dict[str, Any]) -> None:
         """Log DEBUG when a rule condition is met - file only.
-        
+         
         Args:
             rule_name: Name of the rule that fired
             conditions: Dict of condition names and their boolean values
-            mem_state: Current memory state snapshot
-            io_state: Current I/O state snapshot
         """
         self.log_event(
             "DEBUG",
             f"[Rule Triggered] {rule_name}",
             rule=rule_name,
-            conditions=conditions,
-            mem_state=mem_state,
-            io_state=io_state
+            conditions=conditions
         )
 
     def log_io_changes(self, current_io: Dict[str, Any]) -> None:

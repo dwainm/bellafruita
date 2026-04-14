@@ -172,14 +172,11 @@ class RuleEngine:
                     rule.last_triggered = time.time()
                     rule.trigger_count += 1
 
-                    # Log DEBUG with full context (file only)
                     conditions = rule.get_conditions(procon, self.mem)
-                    if conditions:  # Only log if rule provides conditions
+                    if conditions:
                         self.controller.log_manager.debug_rule(
                             rule_name=rule.name,
-                            conditions=conditions,
-                            mem_state=self.mem._state.copy(),
-                            io_state=self._get_io_snapshot(procon)
+                            conditions=conditions
                         )
 
                     # Execute rule action (like ladder coil)
@@ -187,27 +184,6 @@ class RuleEngine:
 
             except Exception as e:
                 self.controller.log_manager.error(f"Error in rule '{rule.name}': {e}")
-
-    def _get_io_snapshot(self, procon) -> Dict[str, Any]:
-        """Get current I/O state snapshot for DEBUG logging.
-        
-        Args:
-            procon: Procon API instance
-            
-        Returns:
-            Dict with all input and output coil states
-        """
-        io_state = {}
-        try:
-            # Get all input coils
-            input_coils = procon.get_all('INPUT', 'coils')
-            io_state.update(input_coils)
-            # Get all output coils
-            output_coils = procon.get_all('OUTPUT', 'coils')
-            io_state.update(output_coils)
-        except Exception:
-            pass
-        return io_state
 
     def get_active_rules(self) -> list[str]:
         """Get list of currently triggered rule names.
