@@ -2,6 +2,8 @@
 
 import os
 import platform
+import time as time_module
+from datetime import datetime
 from typing import Dict, Any
 
 
@@ -10,7 +12,7 @@ def get_system_stats() -> Dict[str, Any]:
     
     Returns:
         Dict with cpu_percent, memory_percent, disk_percent, uptime_seconds,
-        and load_average (Unix only).
+        system_time, and load_average (Unix only).
     """
     try:
         import psutil
@@ -22,6 +24,7 @@ def get_system_stats() -> Dict[str, Any]:
         "memory_percent": psutil.virtual_memory().percent,
         "disk_percent": psutil.disk_usage('/').percent,
         "uptime_seconds": _get_uptime_seconds(),
+        "system_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     
     if hasattr(os, 'getloadavg'):

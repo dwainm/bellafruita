@@ -475,6 +475,10 @@
                 <span class="stat-label">DISK:</span>
                 <span class="stat-value" id="stat-disk">--</span>
             </div>
+            <div class="stat-item">
+                <span class="stat-label">TIME:</span>
+                <span class="stat-value" id="stat-time">--</span>
+            </div>
         </div>
     </div>
 
@@ -1016,6 +1020,12 @@
                 updateStatElement('cpu', stats.cpu_percent, '%');
                 updateStatElement('mem', stats.memory_percent, '%');
                 updateStatElement('disk', stats.disk_percent, '%');
+
+                // Update system time
+                const timeEl = document.getElementById('stat-time');
+                if (timeEl && stats.system_time) {
+                    timeEl.textContent = stats.system_time;
+                }
             } catch (error) {
                 console.error('Failed to fetch system stats:', error);
             }
