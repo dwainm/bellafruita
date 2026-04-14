@@ -3,6 +3,9 @@
 cd "$(dirname "$0")"
 source venv/bin/activate
 
+# Ensure dependencies are installed
+pip install -r requirements.txt > /dev/null 2>&1
+
 # Validate Python syntax before starting
 if ! python -m py_compile main.py config.py 2>/dev/null; then
   echo "ERROR: Python syntax errors detected in application files."

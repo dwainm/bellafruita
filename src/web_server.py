@@ -82,6 +82,12 @@ class WebDashboard:
                 "site_name": self.config.site_name
             }
 
+        @self.app.get("/api/system_stats")
+        async def get_system_stats():
+            """REST endpoint for system resource usage."""
+            from src.system_stats import get_system_stats
+            return get_system_stats()
+
         @self.app.get("/api/logs")
         async def get_logs():
             """REST endpoint for recent log entries."""

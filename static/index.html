@@ -96,6 +96,35 @@
             background: #666;
         }
 
+        .system-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #00d9ff;
+            font-weight: bold;
+        }
+
+        .stat-value.warning {
+            color: #ff9800;
+        }
+
+        .stat-value.critical {
+            color: #f44336;
+        }
+
         /* Main content panels */
         .panel {
             background: #1a1a1a;
@@ -432,6 +461,20 @@
             <span class="heartbeat-item">
                 OUTPUT:<span class="heartbeat-circle inactive" id="output-heartbeat"></span>
             </span>
+        </div>
+        <div class="system-stats">
+            <div class="stat-item">
+                <span class="stat-label">CPU:</span>
+                <span class="stat-value" id="stat-cpu">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">MEM:</span>
+                <span class="stat-value" id="stat-mem">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">DISK:</span>
+                <span class="stat-value" id="stat-disk">--</span>
+            </div>
         </div>
     </div>
 
@@ -965,6 +1008,33 @@
             }
         }
 
+        async function fetchSystemStats() {
+            try {
+                const response = await fetch('/api/system_stats');
+                const stats = await response.json();
+
+                updateStatElement('cpu', stats.cpu_percent, '%');
+                updateStatElement('mem', stats.memory_percent, '%');
+                updateStatElement('disk', stats.disk_percent, '%');
+            } catch (error) {
+                console.error('Failed to fetch system stats:', error);
+            }
+        }
+
+        function updateStatElement(id, value, unit) {
+            if (value === undefined || value === null) return;
+            const el = document.getElementById('stat-' + id);
+            if (el) {
+                el.textContent = value.toFixed(1) + unit;
+                el.className = 'stat-value';
+                if (value > 90) {
+                    el.classList.add('critical');
+                } else if (value > 75) {
+                    el.classList.add('warning');
+                }
+            }
+        }
+
         // Load configuration and initial state, then connect to WebSocket
         loadConfig()
             .then(() => loadInitialState())
@@ -972,10 +1042,15 @@
                 connect();
                 // Initial log fetch; periodic refresh is configured below
                 fetchLogs();
+                // Initial system stats fetch
+                fetchSystemStats();
             });
 
         // Refresh logs periodically
         setInterval(fetchLogs, 2000);
+
+        // Refresh system stats every 5 seconds
+        setInterval(fetchSystemStats, 5000);
     </script>
 </body>
 </html>
