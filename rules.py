@@ -603,6 +603,10 @@ class InitiateMoveBoth(Rule):
         # Start MOTOR_2 immediately (reliable write)
         procon.set_reliable('MOTOR_2', True)
 
+        # Store when safety delay ends (2 seconds after Motor2 starts)
+        safety_end_time = time.time() + 2.0
+        mem.set('Motor3_SafetyEndTime', safety_end_time)
+
         # Calculate how long bin has been on C3
         c3_timer_start = mem.get('C3_Timer')
         if c3_timer_start:
@@ -638,13 +642,16 @@ class StartMovingMotor3AfterDelay(Rule):
     def condition(self, procon, mem):
         """Check if Motor 3 should start after delay."""
         motor3_time = mem.get('Motor3_StartTime')
+        safety_end_time = mem.get('Motor3_SafetyEndTime')
         current_time = time.time()
         mode = mem.mode()
 
         return (
             mode == 'MOVING_BOTH' and
             motor3_time is not None and
-            current_time >= motor3_time
+            safety_end_time is not None and
+            current_time >= motor3_time and
+            current_time >= safety_end_time
         )
 
     def action(self, controller, procon, mem):
@@ -652,12 +659,10 @@ class StartMovingMotor3AfterDelay(Rule):
 
         # Clear timers to avoid starting again.
         mem.set('Motor3_StartTime', None)
+        mem.set('Motor3_SafetyEndTime', None)
 
         # Get the stored delay value
         remaining_delay = mem.get('Motor3_Delay')
-
-        # Safety delay before starting Motor 3
-        time.sleep(2.0)
 
         # Start MOTOR_3 (reliable write)
         procon.set_reliable('MOTOR_3', True)
@@ -694,6 +699,7 @@ class CompleteMoveBoth(Rule):
         procon.set_reliable('MOTOR_2', False)
         # Clear Motor3 timer to prevent it from starting after completion
         mem.set('Motor3_StartTime', None)
+        mem.set('Motor3_SafetyEndTime', None)
         mem.set('Motor3_Delay', None)
         controller.log_manager.info("[MOVING_BOTH] Completed - both motors stopped")
         mem.set_mode('READY')
