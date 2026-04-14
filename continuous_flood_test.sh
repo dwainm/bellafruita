@@ -1,6 +1,15 @@
 #!/bin/bash
 # Continuous flood test - starts mock server and runs 100000 turbo events
 
+# Setup Python venv if it exists
+if [ -d "venv" ]; then
+    echo "Activating venv..."
+    source venv/bin/activate
+elif [ -d ".venv" ]; then
+    echo "Activating .venv..."
+    source .venv/bin/activate
+fi
+
 echo "Starting mock server in background..."
 python main.py --mock --view web &
 SERVER_PID=$!

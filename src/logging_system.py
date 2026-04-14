@@ -8,6 +8,7 @@ import time
 import json
 import os
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 
 @dataclass
@@ -58,6 +59,7 @@ class LogManager:
         self._logged_once: set[str] = set()  # Track messages logged once
         self.debug_mode = debug_mode
         self._last_cleanup_time: float = 0.0  # Track when we last rewrote the log file
+        self._write_executor = ThreadPoolExecutor(max_workers=1)
 
         # Set up log file path
         if log_file is None:
@@ -147,7 +149,7 @@ class LogManager:
         # Only add to in-memory logs if not DEBUG (UI never sees DEBUG)
         if entry.level != "DEBUG":
             self.event_logs.append(entry)
-        self._append_log_to_file(entry)
+        self._write_executor.submit(self._append_log_to_file, entry)
 
     def info(self, message: str) -> None:
         """Log an info event."""
