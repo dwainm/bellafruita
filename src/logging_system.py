@@ -43,13 +43,13 @@ class LogManager:
     """Manages log stacks for Modbus devices."""
 
     def __init__(self, max_entries: int = 3000, log_file: Optional[str] = None,
-                 debug_mode: bool = False, retention_days: int = 7):
+                 debug_mode: bool = True, retention_days: int = 7):
         """Initialize log manager.
 
         Args:
             max_entries: Maximum number of log entries to keep per device
             log_file: Path to persistent log file (default: logs/system_events.jsonl)
-            debug_mode: Enable debug logging (default: False)
+            debug_mode: Enable debug logging (default: True)
             retention_days: Delete rotated log files older than this many days
         """
         self.max_entries = max_entries
