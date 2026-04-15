@@ -149,6 +149,9 @@ class LogManager:
         # Only add to in-memory logs if not DEBUG (UI never sees DEBUG)
         if entry.level != "DEBUG":
             self.event_logs.append(entry)
+        # Skip DEBUG file writes unless debug_mode is enabled
+        if entry.level == "DEBUG" and not self.debug_mode:
+            return
         self._write_executor.submit(self._append_log_to_file, entry)
 
     def info(self, message: str) -> None:
