@@ -31,11 +31,9 @@ class ConveyorController:
             timeout=config.modbus.timeout,
             retries=config.modbus.retries
         )
-        # Check for debug mode from environment variable
-        debug_mode = os.environ.get('DEBUG', '0') == '1'
         self.log_manager = LogManager(
             max_entries=config.system.log_stack_size,
-            debug_mode=debug_mode,
+            debug_mode=True,
             retention_days=config.system.log_retention_days
         )
         self.procon = Procon(
