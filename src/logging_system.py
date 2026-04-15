@@ -7,8 +7,9 @@ from typing import Dict, Any, List, Optional
 import time
 import json
 import os
+import threading
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+import atexit
 
 
 @dataclass
@@ -58,8 +59,11 @@ class LogManager:
         self.event_logs: deque[EventEntry] = deque(maxlen=max_entries)
         self._logged_once: set[str] = set()  # Track messages logged once
         self.debug_mode = debug_mode
-        self._last_cleanup_time: float = 0.0  # Track when we last rewrote the log file
-        self._write_executor = ThreadPoolExecutor(max_workers=1)
+        self._last_cleanup_time: float = 0.0
+        self._log_buffer: list[EventEntry] = []
+        self._buffer_lock = threading.Lock()
+        self._flush_threshold = 50
+        atexit.register(self._flush_buffer)
 
         # Set up log file path
         if log_file is None:
@@ -152,7 +156,10 @@ class LogManager:
         # Skip DEBUG file writes unless debug_mode is enabled
         if entry.level == "DEBUG" and not self.debug_mode:
             return
-        self._write_executor.submit(self._append_log_to_file, entry)
+        with self._buffer_lock:
+            self._log_buffer.append(entry)
+            if len(self._log_buffer) >= self._flush_threshold:
+                self._write_buffer_to_file()
 
     def info(self, message: str) -> None:
         """Log an info event."""
@@ -365,6 +372,32 @@ class LogManager:
                 f.write(json.dumps(data) + '\n')
         except Exception:
             pass
+
+    def _write_buffer_to_file(self) -> None:
+        """Write all buffered entries to file in one batch."""
+        if not self._log_buffer:
+            return
+        try:
+            with open(self.log_file, 'a') as f:
+                for entry in self._log_buffer:
+                    data = {
+                        'timestamp': entry.timestamp,
+                        'level': entry.level,
+                        'message': entry.message,
+                        'formatted_time': entry.get_formatted_time()
+                    }
+                    if entry.context:
+                        data.update(entry.context)
+                    f.write(json.dumps(data) + '\n')
+            self._log_buffer.clear()
+        except Exception:
+            pass
+
+    def _flush_buffer(self) -> None:
+        """Flush remaining buffer to file (called on shutdown)."""
+        with self._buffer_lock:
+            if self._log_buffer:
+                self._write_buffer_to_file()
 
     def cleanup_old_entries(self) -> None:
         """Remove entries older than retention_days from memory and disk.
