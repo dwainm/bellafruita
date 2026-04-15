@@ -62,7 +62,7 @@ class LogManager:
         self._last_cleanup_time: float = 0.0
         self._log_buffer: list[EventEntry] = []
         self._buffer_lock = threading.Lock()
-        self._flush_threshold = 50
+        self._flush_threshold = 100
         atexit.register(self._flush_buffer)
 
         # Set up log file path
