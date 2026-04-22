@@ -133,9 +133,12 @@ class PollingThread(threading.Thread):
 
                 # Log I/O changes FIRST (smart logging - only logs when values change)
                 # This shows the CAUSE before the EFFECT (rule actions)
+                # Skip logging in MANUAL mode - no need to track I/O changes during manual operation
                 if input_data or output_data:
-                    io_combined = {**input_data, **output_data}
-                    self.controller.log_manager.log_io_changes(io_combined)
+                    current_mode = self.rule_engine.get_state().get('_MODE') if self.rule_engine else None
+                    if current_mode != 'MANUAL':
+                        io_combined = {**input_data, **output_data}
+                        self.controller.log_manager.log_io_changes(io_combined)
 
                 # THEN evaluate rules (which may react to I/O changes)
                 # This allows CommsResetRule to detect operator acknowledgment via Auto_Select switch
@@ -154,10 +157,12 @@ class PollingThread(threading.Thread):
                             self.rule_engine.get_state(),
                             self.rule_engine.get_active_rules()
                         )
-                        # Log memory state changes (smart logging)
-                        self.controller.log_manager.log_mem_changes(
-                            self.rule_engine.get_state()
-                        )
+                        # Log memory state changes (smart logging) - skip in MANUAL mode
+                        current_mode = self.rule_engine.get_state().get('_MODE')
+                        if current_mode != 'MANUAL':
+                            self.controller.log_manager.log_mem_changes(
+                                self.rule_engine.get_state()
+                            )
                     else:
                         # Fallback: use controller's comms check
                         self.controller.check_and_handle_comms_failure()
