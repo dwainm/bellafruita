@@ -114,6 +114,7 @@ class PollingThread(threading.Thread):
                 # Perform blocking I/O (outside the lock!)
                 # Always wrap in try/except to handle broken connections gracefully
                 try:
+                    read_start = time.time()
                     if should_read:
                         input_data = self.controller.read_and_log_all_inputs()
                         output_data = self.controller.read_and_log_all_outputs()
@@ -122,12 +123,17 @@ class PollingThread(threading.Thread):
                         # This allows comms health check to see when VERSION heartbeat returns
                         input_data = self.controller.read_and_log_all_inputs()
                         output_data = self.controller.read_and_log_all_outputs()
+                    read_elapsed_ms = (time.time() - read_start) * 1000
+                    # Log warning if read takes longer than 500ms
+                    if read_elapsed_ms > 500:
+                        self.controller.log_manager.warning(f"[TIMING] Slow Modbus read: {read_elapsed_ms:.0f}ms")
                 except Exception as e:
+                    read_elapsed_ms = (time.time() - read_start) * 1000
                     # Read failed - will keep retrying next cycle
                     if in_error_comms_mode:
                         self.controller.log_manager.debug(f"Read failed during ERROR_COMMS (will retry): {e}")
                     else:
-                        self.controller.log_manager.error(f"Read failed during normal operation: {e}")
+                        self.controller.log_manager.error(f"[TIMING] Read failed after {read_elapsed_ms:.0f}ms: {e}")
                     input_data = {}
                     output_data = {}
 
@@ -143,8 +149,13 @@ class PollingThread(threading.Thread):
                 # THEN evaluate rules (which may react to I/O changes)
                 # This allows CommsResetRule to detect operator acknowledgment via Auto_Select switch
                 if self.rule_engine:
+                    rules_start = time.time()
                     sensor_data = {**input_data, **output_data}
                     self.rule_engine.evaluate(sensor_data)
+                    rules_elapsed_ms = (time.time() - rules_start) * 1000
+                    # Log warning if rule evaluation takes longer than 100ms
+                    if rules_elapsed_ms > 100:
+                        self.controller.log_manager.warning(f"[TIMING] Slow rule evaluation: {rules_elapsed_ms:.0f}ms")
 
                 # Update shared state (quick operation with lock)
                 with self.state.lock:
@@ -179,6 +190,9 @@ class PollingThread(threading.Thread):
 
             # Sleep for remainder of poll interval
             elapsed = time.time() - loop_start
+            # Log warning if loop takes longer than 1 second (indicates blocking)
+            if elapsed > 1.0:
+                self.controller.log_manager.warning(f"[TIMING] Slow poll loop: {elapsed*1000:.0f}ms")
             sleep_time = max(0, self.poll_interval - elapsed)
             if sleep_time > 0:
                 self._stop_event.wait(sleep_time)
