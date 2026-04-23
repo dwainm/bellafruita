@@ -153,8 +153,8 @@ class PollingThread(threading.Thread):
                     sensor_data = {**input_data, **output_data}
                     self.rule_engine.evaluate(sensor_data)
                     rules_elapsed_ms = (time.time() - rules_start) * 1000
-                    # Log warning if rule evaluation takes longer than 100ms
-                    if rules_elapsed_ms > 100:
+                    # Log warning if rule evaluation takes longer than 400ms
+                    if rules_elapsed_ms > 400:
                         self.controller.log_manager.warning(f"[TIMING] Slow rule evaluation: {rules_elapsed_ms:.0f}ms")
 
                 # Update shared state (quick operation with lock)
