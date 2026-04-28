@@ -42,8 +42,40 @@ class Procon:
         self.log_manager = log_manager
         self.default_edge_window_ms = 500.0
 
+        # PLC-style input/output image table.
+        # When loaded, get() reads from this snapshot instead of hitting Modbus.
+        # set()/set_reliable() always write live to Modbus regardless.
+        self._snapshot = None
+
+    def load_snapshot(self, input_data: dict, output_data: dict) -> None:
+        """Load input/output image table for this scan cycle.
+
+        Like a PLC input scan: captures all I/O state at the start of the cycle.
+        While loaded, get() reads from this frozen snapshot instead of Modbus.
+        set()/set_reliable() still write live to hardware.
+
+        Args:
+            input_data: Dict of all input labels to values (from bulk read)
+            output_data: Dict of all output labels to values (from bulk read)
+        """
+        self._snapshot = {**input_data, **output_data}
+
+    def clear_snapshot(self) -> None:
+        """Clear the image table after rule evaluation.
+
+        Like a PLC output scan: the snapshot is no longer needed.
+        After clearing, get() reverts to live Modbus reads.
+        """
+        self._snapshot = None
+
     def get(self, device_or_label: str, label: str = None) -> Union[bool, int, None]:
         """Read value by device and label, or by label only.
+
+        PLC IMAGE TABLE BEHAVIOR:
+        When a snapshot is loaded (during rule evaluation), reads come from the
+        frozen image table - no Modbus I/O. This ensures all rules in a scan
+        cycle see the same consistent input state, just like a real PLC.
+        When no snapshot is loaded, falls back to live Modbus reads.
 
         Can be called in two ways:
         1. get(device, label) - Read from specific device
@@ -64,7 +96,17 @@ class Procon:
             >>> procon.get('VERSION')          # Works for any label
             12345
         """
-        # New API: single argument means unified search
+        # Resolve label from either calling convention
+        if label is None:
+            resolved_label = device_or_label
+        else:
+            resolved_label = label
+
+        # If snapshot is loaded, read from image table (PLC-style)
+        if self._snapshot is not None and resolved_label in self._snapshot:
+            return self._snapshot[resolved_label]
+
+        # No snapshot or label not in snapshot - fall back to live Modbus read
         if label is None:
             label = device_or_label
             # Try INPUT first (most signals are inputs)

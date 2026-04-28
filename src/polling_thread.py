@@ -147,11 +147,19 @@ class PollingThread(threading.Thread):
                         self.controller.log_manager.log_io_changes(io_combined)
 
                 # THEN evaluate rules (which may react to I/O changes)
-                # This allows CommsResetRule to detect operator acknowledgment via Auto_Select switch
+                # PLC-STYLE SCAN: Load image table before rules, clear after.
+                # During rule evaluation, procon.get() reads from this frozen snapshot.
+                # procon.set()/set_reliable() still write live to Modbus.
                 if self.rule_engine:
                     rules_start = time.time()
                     sensor_data = {**input_data, **output_data}
-                    self.rule_engine.evaluate(sensor_data)
+                    # Load input/output image table (like PLC input scan)
+                    self.controller.procon.load_snapshot(input_data, output_data)
+                    try:
+                        self.rule_engine.evaluate(sensor_data)
+                    finally:
+                        # Clear image table (like PLC output scan complete)
+                        self.controller.procon.clear_snapshot()
                     rules_elapsed_ms = (time.time() - rules_start) * 1000
                     # Log warning if rule evaluation takes longer than 400ms
                     if rules_elapsed_ms > 400:
